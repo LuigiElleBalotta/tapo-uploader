@@ -156,3 +156,13 @@ def test_bad_url_and_folder_are_rejected():
 def test_make_storage_builds_webdav(dav):
     s = make_storage("webdav", {"url": dav.url, "user": "u", "password": "p", "folder": "f"}, None)
     assert isinstance(s, WebDAVStorage) and s.kind == "webdav"
+
+
+def test_put_recreates_folders_deleted_on_the_server_between_uploads(dav, tmp_path):
+    s = storage(dav)
+    s.put(source(tmp_path), "2026-10-26", "first", "")
+    for path in [p for p in list(dav.files) if p.startswith("/dav/Tapo 2026-10-26")]:
+        del dav.files[path]
+    dav.dirs.discard("/dav/Tapo 2026-10-26")        # someone cleaned the folder up in the cloud
+    item = s.put(source(tmp_path), "2026-10-26", "second", "")
+    assert dav.files["/dav/Tapo 2026-10-26/second.mp4"] == b"0123456789" and item.name == "second.mp4"

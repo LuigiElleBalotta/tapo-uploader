@@ -58,6 +58,8 @@ def resolve(settings, db, vault, user_id):
         return Resolved("youtube", {}, "own")
     try:
         config = json.loads(vault.decrypt(row["config_enc"] or ""))
+        if not isinstance(config, dict):
+            raise ValueError("not an object")
     except (VaultError, ValueError, TypeError, AttributeError):
         return _fallback(default, f"Your saved {kind} settings cannot be read: the server default is used until you save them again.")
     return Resolved(kind, config, "own")

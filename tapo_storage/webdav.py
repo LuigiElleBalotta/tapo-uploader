@@ -46,7 +46,6 @@ class WebDAVStorage(Storage):
         self.folder, self.prefix = segments, prefix
         self.host_check, self.timeout = host_check, timeout
         self._auth = "Basic " + base64.b64encode(f"{user}:{password}".encode()).decode()
-        self._made = set()
         self._day_re = re.compile(rf"^{re.escape(prefix)} ({DAY_RE.pattern})$")
 
     # ----- paths -----
@@ -114,16 +113,13 @@ class WebDAVStorage(Storage):
         return response.status, data
 
     def _mkcols(self, segments):
+        # always asked, never remembered: the folders may have been removed in the cloud since the last upload
         for end in range(1, len(segments) + 1):
-            path = self._path(*segments[:end])
-            if path not in self._made:
-                self._do("MKCOL", path, ok={201, 405})
-                self._made.add(path)
+            self._do("MKCOL", self._path(*segments[:end]), ok={201, 405})
 
     # ----- Storage -----
 
     def check(self):
-        self._made.clear()
         self._mkcols(self.folder)
         probe = self._path(*self.folder, ".tapo-probe")
         self._do("PUT", probe, ok={200, 201, 204}, body=b"ok", headers={"Content-Length": "2"})

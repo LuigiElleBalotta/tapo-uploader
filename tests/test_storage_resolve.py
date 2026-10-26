@@ -215,3 +215,10 @@ def test_user_without_youtube_link_on_youtube_still_discards_stale(tmp_path):
     clip = stale_clip(env, env.alice, cid)
     env.sup.maintenance(datetime.fromtimestamp(env.clock()))
     assert not clip.exists()
+
+
+def test_resolve_ignores_a_saved_config_that_is_not_an_object(tmp_path):
+    env, uid = user(tmp_path, allow_own_storage=True)
+    env.db.save_storage_config(uid, "webdav", env.vault.encrypt("[1, 2, 3]"))
+    resolved = resolve(env.settings, env.db, env.vault, uid)
+    assert resolved.kind == "youtube" and resolved.source == "server" and "cannot be read" in resolved.notice
