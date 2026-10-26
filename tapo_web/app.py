@@ -1,6 +1,7 @@
 """The multi-account web app: server-rendered pages, sessions, CSRF protection and local login."""
 import hmac
 import secrets
+import socket
 from functools import wraps
 from urllib.parse import urlsplit
 
@@ -25,7 +26,7 @@ def create_app(settings: Settings, db: Database = None):
         db = Database(settings.data_dir / "tapo.db")
         db.migrate()
     app.extensions["tapo"] = {"settings": settings, "db": db, "vault": Vault(settings.encryption_key),
-                              "limiter": LoginLimiter()}
+                              "limiter": LoginLimiter(), "resolver": socket.getaddrinfo}
 
     # ----- helpers available to every page -----
 
@@ -138,5 +139,7 @@ def create_app(settings: Settings, db: Database = None):
     register_nextcloud(app)
     from .youtube_link import register as register_youtube
     register_youtube(app)
+    from .cameras import register as register_cameras
+    register_cameras(app)
 
     return app

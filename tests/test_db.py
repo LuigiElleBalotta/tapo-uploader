@@ -123,3 +123,13 @@ def test_update_youtube_token_keeps_link_data(db):
     link = db.youtube_link(uid)
     assert (link["token_enc"], link["channel_title"], link["client_source"]) == ("enc-2", "My channel", "own")
     assert link["client_secret_enc"] == "enc-secret" and link["linked_at"] == linked
+
+
+def test_camera_count_and_ports(db):
+    a = db.add_user("local", "a", "A", "user")
+    c1 = db.add_camera(a, "one", "h", 40010, 40020, "stream1", "u", "p")
+    db.add_camera(a, "two", "h", 40030, 40040, "stream1", "u", "p")
+    assert db.camera_count() == 2
+    assert db.camera_ports() == {40010, 40020, 40030, 40040}
+    db.delete_camera(a, c1)
+    assert db.camera_count() == 1 and db.camera_ports() == {40030, 40040}

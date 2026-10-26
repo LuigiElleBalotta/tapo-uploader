@@ -158,6 +158,15 @@ class Database:
         assignments = ", ".join(f"{name} = ?" for name in fields)
         self._run(f"UPDATE cameras SET {assignments} WHERE id = ?", (*fields.values(), camera_id))
 
+    def camera_count(self):
+        return self._one("SELECT COUNT(*) AS n FROM cameras")["n"]
+
+    def camera_ports(self):
+        ports = set()
+        for row in self._all("SELECT port, onvif_port FROM cameras"):
+            ports.update((row["port"], row["onvif_port"]))
+        return ports
+
     def delete_camera(self, user_id, camera_id):
         return self._run("DELETE FROM cameras WHERE id = ? AND user_id = ?", (camera_id, user_id)).rowcount > 0
 

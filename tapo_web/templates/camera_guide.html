@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Router guide · tapo-uploader{% endblock %}
+{% block content %}
+<h1 class="h3">Open the door for the server: {{ camera.name }}</h1>
+<p class="text-muted">The camera sits behind your home router. You open two ports, <strong>only for this server's IP</strong>, so nobody else can reach the camera.</p>
+
+<div class="card app-card">
+  <h2 class="h5">Do it by hand</h2>
+  <ol>
+    {% for step in guide.manual_steps %}<li class="mb-2">{{ step }}</li>{% endfor %}
+  </ol>
+  <p>Your two ports: video <code>{{ camera.port }}</code> and events <code>{{ camera.onvif_port }}</code>.</p>
+</div>
+
+<div class="card app-card">
+  <h2 class="h5">Or ask an AI assistant</h2>
+  <p class="text-muted">Copy this text into a chat with an AI assistant and fill in the two square brackets. It contains no passwords.</p>
+  <textarea class="form-control" rows="12" readonly>{{ guide.ai_prompt }}</textarea>
+</div>
+
+<a class="btn btn-primary btn-round" href="/cameras/{{ camera.id }}">Test the connection</a>
+{% endblock %}

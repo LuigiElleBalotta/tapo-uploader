@@ -47,6 +47,17 @@ from tapo_web.crypto import Vault
 from tapo_web.db import Database
 
 
+def public_resolver(host, port=None, *args, **kwargs):
+    """Every name resolves to a public address; IP literals resolve to themselves."""
+    import socket
+    import ipaddress
+    try:
+        ip = str(ipaddress.ip_address(host))
+    except ValueError:
+        ip = "93.184.216.34"
+    return [(socket.AF_INET6 if ":" in ip else socket.AF_INET, socket.SOCK_STREAM, 6, "", (ip, 0))]
+
+
 def make_settings(tmp_path, **overrides):
     values = dict(multiuser=True, secret_key="test-secret", encryption_key=Vault.generate_key(),
                   data_dir=tmp_path, server_public_ip="203.0.113.7")
@@ -65,6 +76,7 @@ class Env:
         self.vault = Vault(self.settings.encryption_key)
         self.app = create_app(self.settings, self.db)
         self.app.testing = True
+        self.app.extensions["tapo"]["resolver"] = public_resolver  # tests never touch real DNS
         self.client = self.app.test_client()
 
     def add_local_user(self, username, password, role="user", **kw):
