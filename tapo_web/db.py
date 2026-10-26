@@ -8,7 +8,7 @@ import threading
 import time
 from pathlib import Path
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -54,6 +54,17 @@ CREATE TABLE IF NOT EXISTS storage_configs (
     kind TEXT NOT NULL,
     config_enc TEXT,
     updated_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS storage_sources (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    signature TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    origin TEXT NOT NULL,
+    config_enc TEXT,
+    label TEXT NOT NULL,
+    added_at REAL NOT NULL,
+    UNIQUE (user_id, signature)
 );
 CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY,
@@ -216,6 +227,22 @@ class Database:
 
     def delete_storage_config(self, user_id):
         self._run("DELETE FROM storage_configs WHERE user_id = ?", (user_id,))
+
+    # ----- sources: every destination the user has used, so the old videos stay visible -----
+
+    def add_storage_source(self, user_id, signature, kind, origin, config_enc, label):
+        self._run("INSERT OR IGNORE INTO storage_sources (user_id, signature, kind, origin, config_enc, label, added_at) "
+                  "VALUES (?, ?, ?, ?, ?, ?, ?)", (user_id, signature, kind, origin, config_enc, label, time.time()))
+        return self._one("SELECT id FROM storage_sources WHERE user_id = ? AND signature = ?", (user_id, signature))["id"]
+
+    def storage_sources(self, user_id):
+        return self._all("SELECT * FROM storage_sources WHERE user_id = ? ORDER BY id", (user_id,))
+
+    def storage_source(self, user_id, source_id):
+        return self._one("SELECT * FROM storage_sources WHERE user_id = ? AND id = ?", (user_id, source_id))
+
+    def delete_storage_source(self, user_id, source_id):
+        self._run("DELETE FROM storage_sources WHERE user_id = ? AND id = ?", (user_id, source_id))
 
     # ----- quota and events -----
 

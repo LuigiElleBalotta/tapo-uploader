@@ -12,6 +12,7 @@ from flask import Response, abort, request
 from tapo_storage.base import DAY_RE, StorageError
 
 from .cameras import camera_data_dir
+from .sources import source_resolved
 from .storage import build, resolve
 
 log = logging.getLogger("tapo.web")
@@ -56,8 +57,12 @@ def register(app):
             abort(404)
         if not DAY_RE.fullmatch(day) or not NAME_RE.fullmatch(name):
             abort(404)
-        resolved = resolve(settings, db, vault, camera["user_id"])
-        if resolved.kind == "youtube":
+        selector = request.args.get("s")
+        if selector is None:
+            resolved = resolve(settings, db, vault, camera["user_id"])
+        else:  # a video of an earlier destination: the id is checked against the camera owner's own sources
+            resolved = source_resolved(db, vault, camera["user_id"], int(selector)) if selector.isdigit() and len(selector) < 10 else None
+        if resolved is None or resolved.kind == "youtube":
             abort(404)
         ctx = SimpleNamespace(data_dir=camera_data_dir(settings, camera), playlist_prefix=PREFIX)
         try:

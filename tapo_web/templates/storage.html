@@ -15,6 +15,22 @@
     <p class="text-muted">Videos are saved there, one folder per day. You watch them from your page.</p>
   {% endif %}
 </div>
+{% if sources %}
+<div class="card app-card">
+  <h2 class="h5">Earlier destinations</h2>
+  <p class="text-muted">The videos you saved there stay on your page, marked with where they are. Removing one only hides it from the list: no video is deleted.</p>
+  <ul class="list-unstyled mb-0">
+    {% for source in sources %}
+    <li class="mb-2">{{ source.label }}
+      <form class="d-inline" method="post" action="/storage/sources/{{ source.id }}/forget">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-neutral btn-sm btn-round" type="submit">Remove from the list</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
 {% if allow_own %}
 <div class="card app-card">
   <h2 class="h5">Use a different destination</h2>

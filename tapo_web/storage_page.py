@@ -9,7 +9,8 @@ from tapo_storage.base import StorageError, make_storage
 from .config import USER_STORAGE_KINDS
 from .crypto import VaultError
 from .security import UnsafeHost, assert_public_host, checked_host
-from .storage import resolve
+from .sources import label_for, remember, remembered
+from .storage import Resolved, resolve, server_default
 
 LABELS = {"youtube": "YouTube", "webdav": "WebDAV (Nextcloud and similar)",
           "local": "a folder on the server", "rclone": "a cloud storage connected to the server (rclone)"}
@@ -42,7 +43,14 @@ def register(app):
         return render_template("storage.html", resolved=resolved, label=LABELS[resolved.kind],
                                allow_own=settings.allow_own_storage and bool(kinds), kinds=kinds, labels=LABELS,
                                values=values, has_password=bool(own.get("password")), error=error, result=result,
-                               server_label=LABELS[settings.storage]), status
+                               server_label=LABELS[settings.storage],
+                               sources=[{"id": sid, "label": label_for(old)} for sid, old in remembered(db, vault, uid())
+                                        if old.signature() != resolved.signature()]), status
+
+    def keep_if_left(before, after):
+        """The destination in use stays a source when the new one is a different place."""
+        if before.signature() != after.signature():
+            remember(db, vault, uid(), before)
 
     def webdav_config():
         """The WebDAV settings in the form, checked; (config, None) or (None, message)."""
@@ -80,21 +88,35 @@ def register(app):
         if not settings.allow_own_storage:
             abort(403)
         kind = request.form.get("kind", "")
+        before = resolve(settings, db, vault, uid())
         if kind == "default":
+            keep_if_left(before, server_default(settings))
             db.delete_storage_config(uid())
             flash("Your recordings go to the server's default destination.", "success")
             return redirect("/storage")
         if kind not in USER_STORAGE_KINDS or kind not in settings.storage_allowed:
             return show(400, "That destination is not available on this server.", form=form_values())
         if kind == "youtube":
+            keep_if_left(before, Resolved("youtube", {}, "own"))
             db.save_storage_config(uid(), "youtube", None)
             flash("Your recordings go to your YouTube channel.", "success")
             return redirect("/storage")
         config, problem = webdav_config()
         if problem:
             return show(400, problem, form=form_values())
+        keep_if_left(before, Resolved("webdav", config, "own"))
         db.save_storage_config(uid(), "webdav", vault.encrypt(json.dumps(config)))
         flash("Saved. The recorder restarts with the new destination within a minute.", "success")
+        return redirect("/storage")
+
+    @app.post("/storage/sources/<int:source_id>/forget")
+    @app.login_required
+    def storage_forget_source(source_id):
+        """Stop listing an earlier destination. Nothing is deleted from it."""
+        if db.storage_source(uid(), source_id) is None:
+            abort(404)
+        db.delete_storage_source(uid(), source_id)
+        flash("Removed from your list. The videos are still where they were; nothing was deleted.", "info")
         return redirect("/storage")
 
     @app.post("/storage/test")

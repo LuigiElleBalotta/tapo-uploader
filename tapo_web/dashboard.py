@@ -11,6 +11,7 @@ from flask import render_template
 
 from .cameras import camera_data_dir
 from .pending import list_pending, size_label  # noqa: F401  (size_label is part of this module's API)
+from .sources import label_for, remembered
 from .storage import build, resolve
 from .youtube_link import LinkRevoked, youtube_for_user
 
@@ -62,7 +63,7 @@ def _thumbnail(snippet):
     return None
 
 
-def list_playlists(yt, prefix=PLAYLIST_PREFIX, limit=10):
+def list_playlists(yt, prefix=PLAYLIST_PREFIX, limit=10, source="YouTube"):
     """The user's daily playlists ('Tapo YYYY-MM-DD'), newest first, each with its videos."""
     pattern = re.compile(rf"^{re.escape(prefix)} \d{{4}}-\d{{2}}-\d{{2}}$")
     found, token = [], None
@@ -80,7 +81,7 @@ def list_playlists(yt, prefix=PLAYLIST_PREFIX, limit=10):
         for video in items:
             snippet = video["snippet"]
             video_id = snippet["resourceId"]["videoId"]
-            videos.append({"id": video_id, "kind": "youtube", "ref": video_id, "title": snippet.get("title", ""),
+            videos.append({"id": video_id, "kind": "youtube", "source": source, "ref": video_id, "title": snippet.get("title", ""),
                            "thumbnail": _thumbnail(snippet),
                            # YouTube never plays a private video inside another site, whatever the domain
                            "watchable": (video.get("status") or {}).get("privacyStatus") in ("public", "unlisted"),
@@ -92,11 +93,12 @@ def list_playlists(yt, prefix=PLAYLIST_PREFIX, limit=10):
     return result
 
 
-def list_files(storage, camera_id, prefix=PLAYLIST_PREFIX, label="", limit=10):
+def list_files(storage, camera_id, prefix=PLAYLIST_PREFIX, label="", limit=10, source="", source_id=None):
     """The same shape as `list_playlists`, for a destination that keeps plain files: one group per day."""
     groups = []
     for day in storage.days(limit):
-        videos = [{"kind": "file", "ref": f"/media/{camera_id}/{day}/{quote(video.name, safe='')}",
+        suffix = f"?s={source_id}" if source_id is not None else ""   # the current source needs no selector
+        videos = [{"kind": "file", "source": source, "ref": f"/media/{camera_id}/{day}/{quote(video.name, safe='')}{suffix}",
                    "title": video.name[:-4] if video.name.endswith(".mp4") else video.name, "thumbnail": None, "watchable": True,
                    "published": video.modified, "url": video.url, "size": size_label(video.size)}
                   for video in storage.list_day(day)]
@@ -142,7 +144,7 @@ def register(app):
             log.warning("could not list playlists: %s", type(err).__name__)
             return {"linked": True, "channel": link["channel_title"], "problem": "error"}
 
-    def files_section(user_id, resolved):
+    def files_section(user_id, resolved, source_id=None, title=None):
         """The videos a file destination (WebDAV, folder, rclone) holds for each of the user's cameras."""
         cameras = db.cameras_for_user(user_id)
         groups, problem = [], None
@@ -152,12 +154,13 @@ def register(app):
             try:
                 def load(ctx=ctx, camera=camera, label=label):
                     storage = build(resolved, settings, ctx, state["resolver"])
-                    return list_files(storage, camera["id"], label=label)
-                groups += cache.get((user_id, camera["id"], resolved.signature()), load)
+                    return list_files(storage, camera["id"], label=label, source=label_for(resolved), source_id=source_id)
+                groups += cache.get((user_id, camera["id"], resolved.signature(), source_id), load)
             except Exception as err:  # the destination is down, the cloud login expired...: the page must still open
                 log.warning("could not list videos: %s", type(err).__name__)
                 problem = "error"
-        return {"label": MEDIA_LABELS.get(resolved.kind, resolved.kind), "playlists": groups, "problem": problem}
+        return {"label": title or MEDIA_LABELS.get(resolved.kind, resolved.kind), "playlists": groups, "problem": problem,
+                "source": label_for(resolved)}
 
     def pending_section(user_id):
         """The clips still waiting for the upload, which can be watched before they leave the server."""
@@ -175,7 +178,13 @@ def register(app):
         cameras = camera_cards(db, state["supervisor"], user["id"])
         resolved = resolve(settings, db, vault, user["id"])
         files = files_section(user["id"], resolved) if resolved.kind != "youtube" else None
+        history = remembered(db, vault, user["id"])
+        others = [files_section(user["id"], old, source_id, label_for(old)) for source_id, old in history
+                  if old.kind != "youtube" and old.signature() != resolved.signature()]
+        extra_youtube = None
+        if resolved.kind != "youtube" and (db.youtube_link(user["id"]) or any(old.kind == "youtube" for _, old in history)):
+            extra_youtube = youtube_section(user["id"])   # YouTube stays listed after the destination changes
         return render_template("dashboard.html", cameras=cameras, can_add_camera=len(cameras) < settings.max_cameras_per_user,
                                youtube=youtube_section(user["id"]) if files is None else None, files=files,
-                               pending=pending_section(user["id"]),
+                               others=others, extra_youtube=extra_youtube, pending=pending_section(user["id"]),
                                notice=resolved.notice)

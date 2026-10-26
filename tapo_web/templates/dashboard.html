@@ -14,6 +14,7 @@
           {% else %}<div class="video-placeholder" aria-hidden="true"><span class="mi">movie</span></div>{% endif %}
         </div>
         <span class="video-title">{{ video.title }}{% if video.pending %} <span class="badge badge-idle">Not uploaded yet</span>{% endif %}</span>
+        {% if video.source %}<span class="badge badge-source">{{ video.source }}</span>{% endif %}
         <span class="text-muted video-date">{{ video.published }}{% if video.size %} · {{ video.size }}{% endif %}</span>
         <div class="video-actions">
           {% if video.watchable %}<button class="btn btn-primary btn-sm btn-round" type="button" data-watch>Watch here</button>{% endif %}
@@ -27,6 +28,22 @@
 {% else %}
 <div class="card app-card"><p class="mb-0">{{ empty }}</p></div>
 {% endfor %}
+{% endmacro %}
+{% macro youtube_block(youtube) %}
+{% if not youtube.linked %}
+<div class="card app-card">
+  <p>Link your YouTube channel to upload there. Videos are private and only you can see them.</p>
+  <p class="mb-0"><a class="btn btn-primary btn-round" href="/youtube">Connect YouTube</a></p>
+</div>
+{% elif youtube.problem == 'revoked' %}
+<div class="alert alert-warning" role="alert">YouTube stopped accepting the saved access, so uploads are paused and your clips are kept. <a href="/youtube">Connect YouTube again</a>.</div>
+{% elif youtube.problem %}
+<div class="alert alert-warning" role="alert">YouTube did not answer just now. Your videos are safe; try again in a few minutes.</div>
+{% else %}
+<p class="text-muted">Channel: <strong>{{ youtube.channel }}</strong> · <a href="/youtube">manage</a></p>
+{% if youtube.has_private %}<p class="text-muted"><span class="mi small" aria-hidden="true">lock</span> Private videos cannot be played inside another site: open them on YouTube, where you are signed in.</p>{% endif %}
+{{ video_groups(youtube.playlists, "No daily playlist yet. The first one appears after the first upload.") }}
+{% endif %}
 {% endmacro %}
 <h1 class="h3">Hello, {{ current_user().display_name }}</h1>
 
@@ -71,19 +88,17 @@
 {{ video_groups(files.playlists, "No videos yet. The first ones appear after the first daily upload.") }}
 {% else %}
 <h2 class="h5 section-title">Your videos on YouTube</h2>
-{% if not youtube.linked %}
-<div class="card app-card">
-  <p>Link your YouTube channel to upload there. Videos are private and only you can see them.</p>
-  <p class="mb-0"><a class="btn btn-primary btn-round" href="/youtube">Connect YouTube</a></p>
-</div>
-{% elif youtube.problem == 'revoked' %}
-<div class="alert alert-warning" role="alert">YouTube stopped accepting the saved access, so uploads are paused and your clips are kept. <a href="/youtube">Connect YouTube again</a>.</div>
-{% elif youtube.problem %}
-<div class="alert alert-warning" role="alert">YouTube did not answer just now. Your videos are safe; try again in a few minutes.</div>
-{% else %}
-<p class="text-muted">Channel: <strong>{{ youtube.channel }}</strong> · <a href="/youtube">manage</a></p>
-{% if youtube.has_private %}<p class="text-muted"><span class="mi small" aria-hidden="true">lock</span> Private videos cannot be played inside another site: open them on YouTube, where you are signed in.</p>{% endif %}
-{{ video_groups(youtube.playlists, "No daily playlist yet. The first one appears after the first upload.") }}
+{{ youtube_block(youtube) }}
 {% endif %}
+{% for other in others %}
+<h2 class="h5 section-title">Your videos on {{ other.label }} <span class="text-muted small">(not the current destination)</span></h2>
+{% if other.problem %}
+<div class="alert alert-warning" role="alert">The videos on {{ other.label }} could not load just now (it did not answer). They are still there; try again in a few minutes.</div>
+{% endif %}
+{{ video_groups(other.playlists, "No videos here.") }}
+{% endfor %}
+{% if extra_youtube %}
+<h2 class="h5 section-title">Your videos on YouTube <span class="text-muted small">(not the current destination)</span></h2>
+{{ youtube_block(extra_youtube) }}
 {% endif %}
 {% endblock %}

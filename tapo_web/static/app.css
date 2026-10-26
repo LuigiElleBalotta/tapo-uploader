@@ -51,6 +51,7 @@ label { color: var(--ink); font-weight: 600; font-size: .9rem; }
 .badge-ok { background: #18ce0f; color: #fff; }
 .badge-bad { background: #f5593d; color: #fff; }
 .badge-idle { background: var(--muted); color: #fff; }
+.badge-source { background: transparent; color: var(--muted); border: 1px solid var(--muted); }
 .section-title { margin: 2rem 0 1rem; }
 .video-card { display: block; color: var(--text); }
 .video-stage { aspect-ratio: 16 / 9; background: var(--stage, rgba(127, 127, 127, .15)); border-radius: 8px; overflow: hidden; margin-bottom: .4rem; display: flex; align-items: center; justify-content: center; }
