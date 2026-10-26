@@ -8,3 +8,6 @@ buffer/
 events/
 __pycache__/
 *.log
+
+.superpowers/
+.pytest_cache/
