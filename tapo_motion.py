@@ -32,7 +32,7 @@ from datetime import datetime, timezone
 from googleapiclient.errors import HttpError
 
 import tapo_uploader as base
-from tapo_uploader import BASE, FILE_RE, env, log, scrub
+from tapo_uploader import DATA, FILE_RE, env, log, scrub
 
 PRE = int(env("MOTION_PRE_SECONDS", "30"))
 POST = int(env("MOTION_POST_SECONDS", "300"))
@@ -42,8 +42,8 @@ UPLOAD_AT = datetime.strptime(env("UPLOAD_AT", "21:00"), "%H:%M").time()
 # ONVIF items that count as "something moves": IsMotion = motion detection, IsPeople = person
 # detection. Which ones the camera sends depends on what is switched on in the Tapo app.
 MOTION_EVENTS = {name.strip().lower() for name in env("MOTION_EVENTS", "IsMotion,IsPeople").split(",")}
-BUFFER_DIR = BASE / env("BUFFER_DIR", "buffer")
-EVENTS_DIR = BASE / env("EVENTS_DIR", "events")
+BUFFER_DIR = DATA / env("BUFFER_DIR", "buffer")
+EVENTS_DIR = DATA / env("EVENTS_DIR", "events")
 # ONVIF can sit behind a different host/port than RTSP (e.g. a second port forward)
 ONVIF_HOST = env("ONVIF_HOST", env("CAMERA_HOST"))
 ONVIF_PORT = env("ONVIF_PORT", "2020")

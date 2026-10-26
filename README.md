@@ -21,6 +21,7 @@ setup completo, passo per passo, com'è stato fatto davvero, compresi i problemi
 - [1. La telecamera](#1-la-telecamera)
 - [2. Google Cloud e YouTube](#2-google-cloud-e-youtube)
 - [3. Installazione e prova sul tuo PC](#3-installazione-e-prova-sul-tuo-pc)
+- [Dove farlo girare](#dove-farlo-girare)
 - [4. Il server](#4-il-server)
 - [5. Raggiungere la camera da internet](#5-raggiungere-la-camera-da-internet)
 - [6. Verifica finale](#6-verifica-finale)
@@ -170,6 +171,80 @@ python tapo_uploader.py test    # 3. registra 60 s e li carica: verifica tutto
   giorno. Controlla su YouTube che il video ci sia e poi cancellalo dallo Studio.
 
 Se il server non ha un browser, fai `auth` sul tuo PC e copia `token.json` sul server.
+
+---
+
+## Dove farlo girare
+
+Il programma deve restare acceso 24 ore su 24 e deve poter raggiungere la camera. Le opzioni,
+dalla più semplice:
+
+| Dove | Costo indicativo | Come raggiunge la camera | Note |
+|---|---|---|---|
+| **Raspberry Pi / mini PC in casa** | una tantum, 15–50 € | in LAN | **Consigliato**: niente port forwarding, niente DDNS, niente IP da proteggere. |
+| **VPS** (come in questa guida) | pochi euro al mese | port forwarding limitato all'IP fisso del VPS | Passi 4 e 5. È la configurazione collaudata. |
+| **Render** (Background Worker) | da circa 7 $/mese, più 0,25 $/GB di disco | port forwarding verso gli IP condivisi di Render | Immagine Docker inclusa, **non collaudata**. Vedi sotto. |
+| **Vercel** | – | – | **Non adatto.** Vedi sotto. |
+
+Le altre piattaforme con container (Fly.io, Railway) seguono lo stesso schema di Render: il
+`Dockerfile` funziona ovunque, cambiano prezzi e rete.
+
+### Render
+
+Render può far girare un processo sempre acceso (un *Background Worker*) da un'immagine
+Docker. Il repository contiene `Dockerfile` e `render.yaml`. Cose da sapere:
+
+- **Costo.** Il worker più piccolo (`0.5c-512mb`: 0,5 CPU e 512 MB) è elencato a 7 $/mese. Il
+  piano gratuito di Render è solo per i servizi web, non per i worker. Con ffmpeg in `-c copy` la
+  CPU non è il limite; la RAM non l'ho misurata su Render.
+- **Disco.** Il disco del container si perde a ogni riavvio e a ogni deploy. Senza un **disco
+  persistente** (0,25 $/GB al mese, 1 GB bastano; si attacca a un worker) si perdono il token, lo
+  stato e i clip della giornata prima delle 21:00. Il `render.yaml` ne chiede uno montato su
+  `/data`, e lo script lo usa grazie a `DATA_DIR`.
+- **Segreti.** Su un container non ci sono file da copiare: `token.json` e `client_secret.json` si
+  passano come variabili d'ambiente `YOUTUBE_TOKEN_JSON` e `YOUTUBE_CLIENT_SECRET_JSON` (il contenuto
+  dei file). Alla prima partenza lo script li scrive su `/data` con permessi `600`; dopo, il token
+  rinnovato resta sul disco. Il login (`auth`) si fa una volta sul tuo PC.
+- **La rete è il punto debole.** Gli IP in uscita di Render sono **condivisi da tutti i servizi
+  della stessa regione** e un servizio può usare uno qualsiasi degli indirizzi del suo intervallo
+  (vedi [la documentazione di Render](https://render.com/docs/outbound-ip-addresses)). Per
+  restringere l'accesso alla camera dovresti aprire il port forwarding a **tutti gli intervalli
+  della regione**, quindi anche ad altri clienti di Render, e il router ZTE accetta un solo
+  intervallo per regola. Gli IP dedicati esistono ma, dalle informazioni che ho trovato, sono
+  a pagamento sui piani Pro/Scale (circa 100 $/mese per un gruppo di IP): per questo uso non
+  conviene. Se scegli Render, la porta esposta dev'essere protetta da una password **lunga e
+  unica**, con porta esterna non standard; oppure collega casa e Render con una VPN, cosa che non
+  ho verificato.
+
+Passi: collega il repository a Render (**New → Blueprint**), compila le variabili che chiede
+(`CAMERA_USER`, `CAMERA_PASS`, `CAMERA_HOST`/`CAMERA_PORT`, `ONVIF_HOST`/`ONVIF_PORT`,
+`YOUTUBE_TOKEN_JSON`, `YOUTUBE_CLIENT_SECRET_JSON`), apri sul router le porte verso gli IP di
+Render e guarda i log del worker. Render chiede le variabili solo alla creazione del Blueprint:
+cambiarle dopo si fa dal pannello. Per la registrazione continua invece di quella a movimento
+decommenta `dockerCommand` nel `render.yaml`.
+
+### Vercel
+
+Qui la risposta è no, ed è una questione di come funziona la piattaforma, non di configurazione.
+
+- **Le Functions hanno un tempo massimo.** Con Fluid compute il limite è 300 s su Hobby e 800 s su
+  Pro, con 1800 s in beta ([limiti](https://vercel.com/docs/functions/limitations)). Una
+  funzione risponde a una richiesta e viene spenta: non può tenere ffmpeg collegato alla camera
+  tutto il giorno.
+- **Perché i progetti NestJS "non serverless" funzionavano.** Un'app NestJS su Vercel viene
+  eseguita comunque come funzione: serve richieste HTTP, che durano pochi secondi. Un servizio che
+  registra in continuo è un'altra cosa.
+- **Il disco è temporaneo.** Non c'è un posto dove tenere l'anello di video né i clip fino alle 21.
+- **Vercel Sandbox** è una microVM che può far girare processi in background, ma dura al massimo
+  45 minuti su Hobby o qualche ora su Pro, e i file spariscono quando si ferma. Si potrebbe
+  concatenare una sandbox dopo l'altra e salvare i clip su Vercel Blob, ma resterebbero lacune ad
+  ogni passaggio, i costi di un processo sempre acceso e **IP in uscita non fissi**, quindi il
+  port forwarding non si potrebbe restringere. Non lo consiglio.
+- **Vercel Workflows** mette in pausa e riprende elaborazioni lunghe, ma non è un posto dove far
+  girare un processo di registrazione.
+
+Vercel può invece servire per una pagina di stato o per un'API che legga lo stato dei video, con
+la registrazione che gira altrove.
 
 ---
 
@@ -404,6 +479,8 @@ File `.env` (da `.env.example`, **mai** nel repository):
 | `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_TOKEN` | Nomi dei file `client_secret.json` e `token.json`. |
 | `YOUTUBE_PRIVACY` | `private` (default), `unlisted` o `public`. |
 | `PLAYLIST_PREFIX` | Prefisso di titoli e playlist (default `Tapo`). |
+| `DATA_DIR` | Cartella di token, stato e video in attesa (default: la cartella del progetto). In un container è il disco persistente, es. `/data`. |
+| `YOUTUBE_TOKEN_JSON`, `YOUTUBE_CLIENT_SECRET_JSON` | Contenuto di `token.json` e `client_secret.json`, per i container: se i file mancano vengono creati da qui. |
 
 Solo per `tapo_motion.py` (valori di default tra parentesi):
 

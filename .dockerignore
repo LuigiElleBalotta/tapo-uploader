@@ -1,0 +1,12 @@
+.env
+.venv
+token*.json
+client_secret*.json
+state.json
+recordings
+buffer
+events
+__pycache__
+.git
+deploy
+*.md

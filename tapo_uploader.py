@@ -34,10 +34,13 @@ from googleapiclient.http import MediaFileUpload
 
 BASE = Path(__file__).resolve().parent
 load_dotenv(BASE / ".env")
+# where tokens, state and recordings live: a persistent volume in a container, the project folder otherwise
+DATA = Path(os.getenv("DATA_DIR") or BASE)
+DATA.mkdir(parents=True, exist_ok=True)
 
 SCOPES = ["https://www.googleapis.com/auth/youtube"]
 FILE_RE = re.compile(r"^(\d{8})_(\d{6})\.mp4$")
-STATE_FILE = BASE / "state.json"
+STATE_FILE = DATA / "state.json"
 
 log = logging.getLogger("tapo")
 
@@ -71,7 +74,7 @@ def run_scrubbed(cmd, timeout=None):
 
 
 def record_dir():
-    path = BASE / env("RECORD_DIR", "recordings")
+    path = DATA / env("RECORD_DIR", "recordings")
     path.mkdir(exist_ok=True)
     return path
 
@@ -123,8 +126,19 @@ def record_loop(out_dir, segment_seconds, stop):
 
 # ---------- youtube ----------
 
+def secret_file(file_name, env_var):
+    """Path of a secret file. Containers have no files to copy: if it is missing and the
+    environment variable holds its content, the file is created from it."""
+    path = DATA / file_name
+    content = os.getenv(env_var)
+    if content and not path.exists():
+        path.write_text(content)
+        path.chmod(0o600)
+    return path
+
+
 def youtube_client():
-    token_path = BASE / env("YOUTUBE_TOKEN", "token.json")
+    token_path = secret_file(env("YOUTUBE_TOKEN", "token.json"), "YOUTUBE_TOKEN_JSON")
     creds = None
     if token_path.exists():
         creds = Credentials.from_authorized_user_file(token_path, SCOPES)
@@ -133,7 +147,8 @@ def youtube_client():
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(
-                BASE / env("YOUTUBE_CLIENT_SECRET", "client_secret.json"), SCOPES)
+                secret_file(env("YOUTUBE_CLIENT_SECRET", "client_secret.json"), "YOUTUBE_CLIENT_SECRET_JSON"),
+                SCOPES)
             # print the URL instead of opening the default browser: the Google account may live in another one
             creds = flow.run_local_server(port=0, open_browser=False)
         token_path.write_text(creds.to_json())

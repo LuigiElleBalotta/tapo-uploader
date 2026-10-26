@@ -1,0 +1,43 @@
+# Render Blueprint: a Background Worker that records around motion and uploads once a day.
+# NOT TESTED on Render by the author: check plans and prices on render.com/pricing.
+#
+# New > Blueprint > pick this repository. Render asks for every variable marked "sync: false",
+# but only when the Blueprint is first created: later you add or change them in the dashboard.
+# The camera must be reachable from Render: see "Dove farlo girare" in README.md
+# (Render's outbound IPs are shared per region, so the router rule must allow that whole range).
+services:
+  - type: worker
+    name: tapo-uploader
+    runtime: docker
+    plan: 0.5c-512mb              # cheapest worker (listed at $7/month); the free plan is for web services only
+    # dockerCommand: python -u tapo_uploader.py run    # continuous recording instead of motion mode
+    disk:                         # keeps token, state and the day's clips across restarts and deploys
+      name: tapo-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: DATA_DIR
+        value: /data
+      - key: TZ
+        value: Europe/Rome
+      - key: CAMERA_STREAM
+        value: stream1
+      # camera account created in the Tapo app (not the cloud account)
+      - key: CAMERA_USER
+        sync: false
+      - key: CAMERA_PASS
+        sync: false
+      # how Render reaches the camera: your DDNS name and the forwarded external ports
+      - key: CAMERA_HOST
+        sync: false
+      - key: CAMERA_PORT
+        sync: false
+      - key: ONVIF_HOST
+        sync: false
+      - key: ONVIF_PORT
+        sync: false
+      # contents of token.json (created locally with `python tapo_uploader.py auth`) and client_secret.json
+      - key: YOUTUBE_TOKEN_JSON
+        sync: false
+      - key: YOUTUBE_CLIENT_SECRET_JSON
+        sync: false
