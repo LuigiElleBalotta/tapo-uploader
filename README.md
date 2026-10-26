@@ -9,6 +9,10 @@ viene cancellato dal disco.
  (casa)                        (cartella recordings/)             (video privati, file cancellato)
 ```
 
+Ci sono **due modalità**: la registrazione continua a segmenti (`tapo_uploader.py`, descritta
+sotto) e quella **solo attorno ai movimenti con un video al giorno** (`tapo_motion.py`, vedi
+[Modalità a movimento](#modalità-a-movimento-un-video-al-giorno)).
+
 La telecamera non sa caricare nulla da sola: serve un computer sempre acceso (un VPS, un
 Raspberry Pi, un mini PC) che legga lo stream e faccia l'upload. Questa guida racconta il
 setup completo, passo per passo, com'è stato fatto davvero, compresi i problemi incontrati.
@@ -20,6 +24,7 @@ setup completo, passo per passo, com'è stato fatto davvero, compresi i problemi
 - [4. Il server](#4-il-server)
 - [5. Raggiungere la camera da internet](#5-raggiungere-la-camera-da-internet)
 - [6. Verifica finale](#6-verifica-finale)
+- [Modalità a movimento: un video al giorno](#modalità-a-movimento-un-video-al-giorno)
 - [Uso quotidiano](#uso-quotidiano)
 - [Configurazione](#configurazione)
 - [Come funziona](#come-funziona)
@@ -288,6 +293,86 @@ Studio → Contenuti → Playlist.
 
 ---
 
+## Modalità a movimento: un video al giorno
+
+Alternativa alla registrazione continua (`tapo_uploader.py`): `tapo_motion.py` registra **solo
+quando la camera rileva un movimento** e carica **un unico video al giorno**, per esempio alle 21.
+Con la registrazione continua si caricano 4 video al giorno e si tiene tutto; qui si tiene solo
+ciò che è successo.
+
+```
+ ffmpeg ──▶ anello di segmenti da 10 s (solo l'ultimo minuto) ──┐
+ camera ──ONVIF (eventi)──▶ movimento? ──▶ clip: 30 s prima + 5 min dopo ──▶ events/AAAAMMGG/
+                                                                        │
+                       alle 21:00: tutti i clip del giorno ──▶ un video privato ──▶ file cancellati
+```
+
+**Regole:**
+- Il primo movimento apre un evento: il clip va da `MOTION_PRE_SECONDS` (30 s) **prima** a
+  `MOTION_POST_SECONDS` (5 min) **dopo**.
+- Un movimento che arriva negli **ultimi `MOTION_EXTEND_WITHIN` secondi (30)** della finestra la
+  prolunga di altri 5 minuti da quel momento (per esempio un movimento al 4:50). Lo stesso se il
+  movimento è ancora in corso. I movimenti nelle fasi precedenti della finestra vengono ignorati.
+- Alle `UPLOAD_AT` (21:00) i clip del giorno vengono uniti **senza ricodificare** in un solo video
+  privato. Il titolo è `Tapo 2026-10-26 eventi 07:12-20:55 (5)` e la **descrizione elenca l'ora di
+  ogni evento** (`0:00 Movimento alle 07:12:03`...): YouTube la mostra come capitoli. Poi i file
+  vengono cancellati. Se un giorno non c'è stato nessun evento non si carica nulla. Un evento
+  chiuso dopo le 21:00 finisce nel video successivo.
+- Senza movimenti il disco non si riempie: l'anello tiene circa un minuto di video.
+
+**Cosa serve in più:**
+
+1. **Rilevamento attivo nell'app Tapo** (Impostazioni → Rilevamento e allarmi). Gli eventi
+   dipendono da cosa è acceso: `IsMotion` = rilevamento del movimento, `IsPeople` = rilevamento
+   persone. Si scelgono con `MOTION_EVENTS` (default: tutti e due).
+2. **ONVIF raggiungibile dal server.** Gli eventi passano dalla porta 2020 della camera. In LAN non
+   serve nulla; da remoto serve **una seconda regola di port forwarding** come quella del passo 5.2:
+   porta esterna `38020` (a scelta) verso `IP_CAMERA:2020`, TCP, **solo dall'IP del server**. Nel
+   `.env` del server:
+
+   ```
+   ONVIF_HOST=il-tuo-nome.dominio.com
+   ONVIF_PORT=38020
+   ```
+
+   Su alcuni router (ZTE H388X) la regola creata diventa attiva solo dopo aver premuto **Applica una
+   seconda volta**: verifica dal server con `bash -c '</dev/tcp/il-tuo-nome.dominio.com/38020'`.
+3. **Servizio al posto di quello continuo.** La camera accetta una sola sessione RTSP per stream:
+   fermane uno prima di avviare l'altro.
+
+   ```bash
+   sudo systemctl disable --now tapo-uploader
+   sudo cp deploy/tapo-motion.service /etc/systemd/system/    # imposta UTENTE e i percorsi
+   sudo systemctl daemon-reload && sudo systemctl enable --now tapo-motion
+   journalctl -u tapo-motion -f
+   ```
+
+**Comandi:**
+
+```bash
+python tapo_motion.py listen 60    # stampa gli eventi di movimento che la camera invia (prova ONVIF)
+python tapo_motion.py run          # registra attorno ai movimenti, carica una volta al giorno
+python tapo_motion.py upload       # unisce e carica subito i clip in attesa
+```
+
+**Prova rapida con tempi ridotti**, da un PC in LAN (usa `stream2` se il servizio occupa `stream1`):
+
+```bash
+CAMERA_STREAM=stream2 MOTION_POST_SECONDS=20 MOTION_EXTEND_WITHIN=10 UPLOAD_AT=00:00 \
+  python tapo_motion.py run
+```
+
+Cammina davanti alla camera: nel log compaiono `motion: recording...`, poi `clip saved` e,
+entro un minuto, l'upload del video del giorno (`UPLOAD_AT=00:00` lo rende subito dovuto).
+
+**Cose da sapere:**
+- I 30 secondi di anticipo hanno una tolleranza di circa 10 secondi (segmenti da 10 s, tagli sui
+  keyframe).
+- Se il servizio si riavvia durante un evento, quel clip va perso.
+- Con la camera ferma `listen` non stampa nulla: la camera segnala solo i cambi di stato.
+
+---
+
 ## Uso quotidiano
 
 ```bash
@@ -319,6 +404,19 @@ File `.env` (da `.env.example`, **mai** nel repository):
 | `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_TOKEN` | Nomi dei file `client_secret.json` e `token.json`. |
 | `YOUTUBE_PRIVACY` | `private` (default), `unlisted` o `public`. |
 | `PLAYLIST_PREFIX` | Prefisso di titoli e playlist (default `Tapo`). |
+
+Solo per `tapo_motion.py` (valori di default tra parentesi):
+
+| Variabile | Significato |
+|---|---|
+| `MOTION_PRE_SECONDS` (30) | Secondi registrati prima del primo movimento. |
+| `MOTION_POST_SECONDS` (300) | Secondi registrati dopo il movimento. |
+| `MOTION_EXTEND_WITHIN` (30) | Un movimento negli ultimi N secondi della finestra la prolunga. |
+| `MOTION_EVENTS` (`IsMotion,IsPeople`) | Eventi ONVIF che contano come movimento. |
+| `UPLOAD_AT` (`21:00`) | Ora dopo la quale si carica il video del giorno. |
+| `BUFFER_SEGMENT_SECONDS` (10) | Durata dei segmenti dell'anello. |
+| `BUFFER_DIR`, `EVENTS_DIR` | Cartelle dell'anello e dei clip (`buffer`, `events`). |
+| `ONVIF_HOST`, `ONVIF_PORT` (host della camera, `2020`) | Dove raggiungere gli eventi ONVIF. |
 
 ---
 
@@ -385,6 +483,10 @@ mezzanotte, ora del Pacifico.
 | Playlist col giorno sbagliato o tagli all'una | Il processo gira in UTC: manca `TZ` nel servizio. |
 | Non vedo la playlist nel mio canale | È privata: cercala in YouTube → Tu → Playlist, non nella pagina pubblica del canale. |
 | Nessun upload dopo ore | Il segmento non è ancora chiuso: guarda `recordings/` e `journalctl -u tapo-uploader`. |
+| `listen` non stampa mai niente | Rilevamento spento nell'app Tapo, oppure nessun movimento: gli eventi arrivano solo ai cambi di stato. |
+| Eventi ONVIF: timeout o nessuna risposta | La porta ONVIF non è raggiungibile (regola da riapplicare, IP del server cambiato). Prova `bash -c '</dev/tcp/HOST/PORTA'`. |
+| La camera risponde solo alla prima richiesta ONVIF | Succede con `PullMessages` lunghi o con client HTTP standard: lo script usa richieste da 1 s su un socket semplice. |
+| Eventi sempre ignorati | `MOTION_EVENTS` non contiene l'evento che la camera manda (`IsPeople` invece di `IsMotion`, o viceversa). |
 | `quotaExceeded` | Troppi upload per la quota giornaliera: aumenta la durata dei segmenti. |
 
 ---

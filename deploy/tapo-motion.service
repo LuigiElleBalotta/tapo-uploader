@@ -1,0 +1,25 @@
+# Records the Tapo camera only around motion and uploads one video per day (private).
+# Instead of tapo-uploader.service: the camera allows a single RTSP session per stream, so
+# enable only one of the two.
+# Install: sudo cp tapo-motion.service /etc/systemd/system/ && sudo systemctl daemon-reload
+#          sudo systemctl enable --now tapo-motion
+# Status:  systemctl status tapo-motion        Logs: journalctl -u tapo-motion -f
+# After editing .env or the scripts: sudo systemctl restart tapo-motion
+# Replace UTENTE with your Linux user and adjust the paths if the project lives elsewhere.
+
+[Unit]
+Description=Tapo camera: record around motion, upload one video a day
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# The upload time (UPLOAD_AT) and the clip names follow this time zone.
+Environment=TZ=Europe/Rome
+User=UTENTE
+WorkingDirectory=/home/UTENTE/tapo-uploader
+ExecStart=/home/UTENTE/tapo-uploader/.venv/bin/python -u tapo_motion.py run
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

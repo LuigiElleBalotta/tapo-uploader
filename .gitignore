@@ -4,5 +4,7 @@ client_secret*.json
 token*.json
 state.json
 recordings/
+buffer/
+events/
 __pycache__/
 *.log

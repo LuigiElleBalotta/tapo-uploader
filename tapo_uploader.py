@@ -176,12 +176,13 @@ def playlist_for(yt, state, day):
     return pid
 
 
-def upload(yt, state, path, start):
-    # the real end is the last write: partial segments (restart, stream drop) are shorter
-    end = datetime.fromtimestamp(path.stat().st_mtime)
-    title = f"{env('PLAYLIST_PREFIX', 'Tapo')} {start:%Y-%m-%d %H:%M}-{end:%H:%M}"
+def upload(yt, state, path, start, title=None, description=""):
+    if title is None:
+        # the real end is the last write: partial segments (restart, stream drop) are shorter
+        end = datetime.fromtimestamp(path.stat().st_mtime)
+        title = f"{env('PLAYLIST_PREFIX', 'Tapo')} {start:%Y-%m-%d %H:%M}-{end:%H:%M}"
     body = {
-        "snippet": {"title": title, "categoryId": "22"},
+        "snippet": {"title": title, "description": description, "categoryId": "22"},
         "status": {"privacyStatus": env("YOUTUBE_PRIVACY", "private"), "selfDeclaredMadeForKids": False},
     }
     media = MediaFileUpload(str(path), chunksize=8 * 1024 * 1024, resumable=True)
