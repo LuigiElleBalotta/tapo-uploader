@@ -8,9 +8,11 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY tapo_uploader.py tapo_motion.py ./
+# requirements-web.txt includes requirements.txt and adds what the multi-account web app needs
+COPY requirements.txt requirements-web.txt ./
+RUN pip install --no-cache-dir -r requirements-web.txt
+COPY tapo_uploader.py tapo_motion.py camera_context.py camera_worker.py ./
+COPY tapo_web ./tapo_web
 RUN mkdir -p /data
 
 # DATA_DIR must be a persistent volume: it holds the token, the state and the clips waiting for the upload
@@ -18,5 +20,7 @@ ENV DATA_DIR=/data \
     TZ=Europe/Rome \
     PYTHONUNBUFFERED=1
 
-# Record around motion, one upload a day. For continuous recording use: python -u tapo_uploader.py run
+# Record around motion, one upload a day (single user, configured with environment variables).
+# For continuous recording use: python -u tapo_uploader.py run
+# For the multi-account web app use: python -u -m tapo_web run   (with MULTIUSER=1, see README.md)
 CMD ["python", "-u", "tapo_motion.py", "run"]

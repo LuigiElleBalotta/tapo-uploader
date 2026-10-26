@@ -1,0 +1,7 @@
+# Extra packages for the multi-account web app (python -m tapo_web). The single-user programs do not need them.
+-r requirements.txt
+Flask>=3.0
+cryptography>=42
+waitress>=3.0
+requests>=2.31
+tzdata>=2024.1
