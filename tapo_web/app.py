@@ -130,16 +130,13 @@ def create_app(settings: Settings, db: Database = None):
         session.clear()
         return redirect(url_for("login"))
 
-    @app.get("/")
-    @login_required
-    def home():
-        return render_template("home.html")
-
     from .auth_nextcloud import register as register_nextcloud
     register_nextcloud(app)
     from .youtube_link import register as register_youtube
     register_youtube(app)
     from .cameras import register as register_cameras
     register_cameras(app)
+    from .dashboard import register as register_dashboard
+    register_dashboard(app)
 
     return app

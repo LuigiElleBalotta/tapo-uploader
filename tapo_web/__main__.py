@@ -61,8 +61,10 @@ def main(argv=None, environ=None):
 
     supervisor = Supervisor(db, Vault(settings.encryption_key), settings)
     supervisor.start()
+    app = create_app(settings, db)
+    app.extensions["tapo"]["supervisor"] = supervisor  # the personal page shows what the workers report
     try:
-        serve(create_app(settings, db), host=environ.get("HOST", "0.0.0.0"), port=int(environ.get("PORT", "8080")))
+        serve(app, host=environ.get("HOST", "0.0.0.0"), port=int(environ.get("PORT", "8080")))
     finally:
         supervisor.stop_all()
 

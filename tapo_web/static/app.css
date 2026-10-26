@@ -51,4 +51,9 @@ label { color: var(--ink); font-weight: 600; font-size: .9rem; }
 .badge-ok { background: #18ce0f; color: #fff; }
 .badge-bad { background: #f5593d; color: #fff; }
 .badge-idle { background: var(--muted); color: #fff; }
+.section-title { margin: 2rem 0 1rem; }
+.video-tile { display: block; color: var(--text); }
+.video-tile img { border-radius: 8px; margin-bottom: .4rem; }
+.video-title { display: block; font-weight: 600; color: var(--ink); line-height: 1.3; }
+.video-date { font-size: .85rem; }
 code { color: var(--accent); background: transparent; padding: 0; }
