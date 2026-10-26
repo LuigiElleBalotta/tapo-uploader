@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
   <title>tapo-uploader privacy policy</title>
-  <meta name="description" content="Privacy policy of tapo-uploader: what the app accesses on the author's Google account, what is stored and how to revoke access.">
+  <meta name="description" content="Privacy policy of tapo-uploader: what the hosted service stores, how it uses your YouTube account, how long data is kept and how to delete it or revoke access.">
   <link rel="canonical" href="https://luigiellebalotta.github.io/tapo-uploader/privacy.html">
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
   <link rel="stylesheet" href="assets/vendor/now-ui-kit/css/bootstrap.min.css">
@@ -35,22 +35,46 @@
   <main class="section">
     <div class="container policy">
       <div class="row"><div class="col-lg-9">
-        <p>tapo-uploader is a personal tool used only by its author. It is not distributed to or used by other people.</p>
+        <p class="text-muted">Last updated: 26 October 2026.</p>
+        <p>tapo-uploader is free, open-source software that records a security camera when it detects motion and saves the recordings to a place the user chooses (by default their own YouTube channel). It is self-hosted: <strong>whoever runs a copy decides what happens to the data in it</strong>. This page covers two cases: the copy run by the author for a small group of invited people (the "hosted service"), and every other copy (see "If you run it yourself" below).</p>
 
-        <h2>What the app accesses</h2>
-        <p>With the author's explicit consent, the app uses the YouTube Data API (scope <code>youtube</code>) on the author's own Google account to upload videos, create playlists and add videos to them.</p>
+        <h2>Who is responsible</h2>
+        <p>For the hosted service the author (Luigi Balotta) is responsible for the data described here. People are invited personally; the service is not open to the public and is not advertised as a product.</p>
 
-        <h2>What is stored</h2>
-        <p>The OAuth access and refresh tokens are stored only on the author's own computer or server. Videos are recorded locally and deleted after a successful upload.</p>
+        <h2>What the hosted service stores</h2>
+        <ul>
+          <li><strong>Your account:</strong> a username and display name, your role, and either a password stored only as a salted hash, or, if you sign in with the author's Nextcloud, the username, display name and group names that Nextcloud provides.</li>
+          <li><strong>Your camera:</strong> a name, its network address and ports, the camera account user name and password you enter (stored encrypted), its status, and the times of the last motion and the last upload. A log of events (motion, uploads, errors) is kept for 30 days.</li>
+          <li><strong>Your YouTube link:</strong> if you connect YouTube, the OAuth access and refresh tokens (stored encrypted) and your channel's title. See the next section.</li>
+          <li><strong>Your recordings:</strong> short video clips recorded when your camera detects motion are kept on the server only until the daily upload, then deleted. If the upload is impossible (for example the YouTube link was revoked), clips older than 7 days are deleted. If the destination chosen for your account is storage kept by the hosted service (a folder, a WebDAV or an rclone remote of the author), your videos stay there until you or the administrator delete them, and the administrator can technically read them. If you choose your own WebDAV, they go to your own cloud.</li>
+          <li><strong>Technical data:</strong> the web server's access logs (IP address, time, page requested), kept for security and troubleshooting and rotated by the server; one session cookie that keeps you signed in; and a theme preference saved in your browser. There is no analytics, no advertising and no third-party tracker, and the pages load nothing from other sites (the YouTube player is loaded only when you press "Watch here").</li>
+        </ul>
+
+        <h2>What the app accesses on your Google account</h2>
+        <p>Only if you press "Connect YouTube", and with your consent on Google's screen, the app uses the YouTube Data API (scope <code>https://www.googleapis.com/auth/youtube</code>) on your own account to:</p>
+        <ul>
+          <li>upload your recordings as private videos, create a playlist per day ("Tapo YYYY-MM-DD") and add the videos to it;</li>
+          <li>read your own channel's title, and read your own playlists and the videos in the daily playlists, to show them to you on your personal page (titles, dates and thumbnails are shown to you and kept in the server's memory for a few minutes, not stored).</li>
+        </ul>
+        <p>The app does not read, change or delete any other video, playlist or data, and does not touch other Google accounts or services. Every person's videos go only to their own channel.</p>
+        <p>tapo-uploader's use and transfer to any other app of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy#additional_requirements_for_specific_api_scopes">Google API Services User Data Policy</a>, including its Limited Use requirements. Google user data is used only to provide the features above: it is not used for advertising, not sold, not shared with other people, and not used to train any model. Humans do not read it, except with your explicit consent, for security reasons, or to comply with the law. By using the YouTube connection you also agree to the <a href="https://www.youtube.com/t/terms">YouTube Terms of Service</a>; Google's own handling of your data is described in the <a href="https://policies.google.com/privacy">Google Privacy Policy</a>.</p>
 
         <h2>Sharing</h2>
-        <p>No data is collected from third parties, sold, shared or sent anywhere other than YouTube, and only to the author's own channel.</p>
+        <p>Nothing is sold or used for advertising. Data goes only to the services that make the features work: Google/YouTube (your recordings and the requests above), the author's Nextcloud (to sign you in), and, if you choose it, your own WebDAV cloud. Other users of the hosted service cannot see your camera, recordings or tokens. The administrator can see accounts, camera status and error messages, but passwords and tokens are stored encrypted and are never shown.</p>
 
-        <h2>Revoking access</h2>
-        <p>Access can be revoked at any time from <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.</p>
+        <h2>Keeping and deleting your data</h2>
+        <ul>
+          <li>You can disconnect YouTube at any time on the YouTube page: the stored tokens are deleted at once. You can also revoke the access at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.</li>
+          <li>If you delete your camera, its recordings on the server are deleted with it.</li>
+          <li>If your account is deactivated, your data and tokens are deleted 30 days later.</li>
+          <li>To have everything about you deleted sooner, or to ask what is stored, contact the author (below).</li>
+        </ul>
+
+        <h2>If you run it yourself</h2>
+        <p>The software sends nothing to the author: no telemetry, no analytics, no accounts. When you install your own copy, the data described above stays on your own server and you are responsible for it. Whoever runs a copy should publish a privacy policy that matches how they use it, in particular if other people use their server or their Google project.</p>
 
         <h2>Contact</h2>
-        <p>Open an issue on <a href="https://github.com/LuigiElleBalotta/tapo-uploader/issues">the project's GitHub repository</a>.</p>
+        <p>Open an issue on <a href="https://github.com/LuigiElleBalotta/tapo-uploader/issues">the project's GitHub repository</a>, or write to the person who invited you. This policy may change as the software changes; the date above says when it was last updated.</p>
 
         <p><a href="index.html">Back</a></p>
       </div></div>

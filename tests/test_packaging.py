@@ -55,3 +55,14 @@ def test_index_sections_still_alternate_backgrounds():
     assert [i for i, _ in order] == ["how", "features", "friends", "storage", "run", "start", "faq"]
     flags = [alt for _, alt in order]
     assert all(a != b for a, b in zip(flags, flags[1:])), order
+
+
+def test_privacy_policy_covers_what_google_and_users_need():
+    html = read("privacy.html")
+    for needed in ("Limited Use", "youtube", "myaccount.google.com/permissions", "30 days", "7 days", "encrypted",
+                   "If you run it yourself", "api-services-user-data-policy", "Last updated"):
+        assert needed in html, needed
+    assert "used only by its author" not in html and "not distributed to or used by other people" not in html
+    refs = re.findall(r'<(?:link|script|img)\b[^>]*?(?:href|src)="([^"]+)"', html)
+    own = "https://luigiellebalotta.github.io/tapo-uploader/"
+    assert not [r for r in refs if re.match(r"^(https?:)?//", r) and not r.startswith(own)]
