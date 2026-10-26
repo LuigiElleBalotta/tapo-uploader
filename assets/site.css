@@ -76,6 +76,7 @@ code { color: #b8431d; background: #fff1ec; padding: 1px 5px; border-radius: 4px
 .hero h1 { color: #fff; font-size: 2.6rem; line-height: 1.15; font-weight: 700; margin-bottom: 1.2rem; }
 .hero .lead { color: #e6e2f2; font-size: 1.15rem; line-height: 1.6; }
 .hero .lead strong { color: #fff; }
+.eyebrow-dark { color: var(--accent) !important; }
 .eyebrow { color: var(--accent-soft); text-transform: uppercase; letter-spacing: .12em; font-size: .8rem; font-weight: 700; margin-bottom: .8rem; }
 .cta { margin: 1.8rem 0 1rem; }
 .cta .btn { margin: 0 .6rem .6rem 0; }
