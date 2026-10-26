@@ -31,7 +31,7 @@
 5. Admin removes a kind from `STORAGE_ALLOWED` while users saved it: fall back to server default with a notice (Tasks 8, 9).
 6. rclone missing or remote wrong: UI error, not a crash loop (Tasks 4, 9).
 7. `/media` abuse: `../`, other user's camera, invalid/huge Range, vanished file (Task 10).
-8. Video with audio browsers cannot decode (Task 5) and with no audio at all.
+8. Video with no audio at all, and a camera set to H.265 (Tasks 11, 12: still plays where supported, the docs warn).
 
 ---
 
@@ -99,21 +99,11 @@
 - [ ] **Step 4: Run** the file and the full suite. Expected: pass.
 - [ ] **Step 5: Commit** `feat: rclone storage backend`.
 
-### Task 5: Browser-friendly audio
+### Task 5: (dropped) Browser-friendly audio
 
-**Files:**
-- Create: `tapo_storage/audio.py`
-- Modify: `tapo_motion.py` (replace the Task 2 stub)
-- Test: `tests/test_storage_audio.py`
-
-**Interfaces:**
-- Produces: `audio_codec(path: Path, run=subprocess.run) -> Optional[str]` (first audio stream's codec via `ffprobe`, `None` if no audio); `prepare_for_browser(path: Path, run=subprocess.run) -> Path` (returns `path` untouched when the audio is `aac` or absent; otherwise writes `<stem>.aac.mp4` next to it with `-c:v copy -c:a aac -b:a 64k -movflags +faststart`, deletes the original and returns the new path; on ffmpeg failure raises `StorageError` and keeps the original).
-
-- [ ] **Step 1: Write failing tests** with a fake `run`: `test_aac_audio_is_left_alone`, `test_no_audio_is_left_alone`, `test_pcm_alaw_is_remuxed_to_aac_copying_video`, `test_remux_failure_keeps_original_and_raises`; and one real-ffmpeg test `test_real_g711_clip_becomes_aac` generated with `ffmpeg -f lavfi -i testsrc -f lavfi -i sine -c:v libx264 -c:a pcm_alaw` (skipped when `ffmpeg` is not on PATH).
-- [ ] **Step 2: Run.** Expected: FAIL.
-- [ ] **Step 3: Implement**; in `upload_day` call `prepare_for_browser(day_file)` only when `storage.needs_browser_audio`, and keep deleting the resulting file in the clean-up.
-- [ ] **Step 4: Run** the full suite. Expected: pass.
-- [ ] **Step 5: Commit** `feat: convert non-AAC audio for browser playback`.
+Dropped during execution: recordings already carry AAC audio (`-c:a aac` in `ffmpeg_cmd`) and ffmpeg cannot store G.711
+in MP4, so there is nothing to convert. See the spec's decision 10b and the ledger ruling. The only real browser risk
+(a camera set to H.265) is documented in Task 12.
 
 ### Task 6: Single-user configuration from the environment
 

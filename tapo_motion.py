@@ -284,10 +284,6 @@ def storage_for(ctx, state=None):
     return YouTubeStorage(ctx, state)
 
 
-def prepare_for_browser(path):
-    return path  # replaced by the real audio conversion in tapo_storage.audio
-
-
 def upload_day(ctx, storage, day_dir, report=_ignore):
     clips = sorted(day_dir.glob("[0-9]*.mp4"))
     if not clips:
@@ -306,11 +302,10 @@ def upload_day(ctx, storage, day_dir, report=_ignore):
     description = "\n".join(lines[:120])  # YouTube allows 5000 characters
     day_file = day_dir / "day.mp4"
     join(clips, day_file)
-    to_send = prepare_for_browser(day_file) if storage.needs_browser_audio else day_file
-    storage.put(to_send, f"{first:%Y-%m-%d}", title, description)
+    storage.put(day_file, f"{first:%Y-%m-%d}", title, description)
     report("uploaded", title)
     # delete only what was uploaded: a clip saved meanwhile waits for the next upload
-    for path in clips + [day_file, to_send]:
+    for path in clips + [day_file]:
         path.unlink(missing_ok=True)
     try:
         day_dir.rmdir()

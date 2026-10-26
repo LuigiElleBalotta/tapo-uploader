@@ -46,7 +46,6 @@ class Storage:
     kind = ""
     uses_quota = False          # only YouTube spends the shared API quota
     browsable = True            # days()/list_day()/open() work
-    needs_browser_audio = True  # the file is meant to be played in a browser
 
     def connect(self) -> None:
         """Get ready to upload; raises what the destination raises (a revoked token, ...). Called before the

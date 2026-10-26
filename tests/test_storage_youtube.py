@@ -10,7 +10,6 @@ from tapo_storage.base import Storage, StorageError, StoredItem
 class RecordingStorage(Storage):
     kind = "fake"
     uses_quota = False
-    needs_browser_audio = False
 
     def __init__(self, error=None):
         self.puts, self.error = [], error
@@ -64,7 +63,7 @@ def test_youtube_put_delegates_to_base_upload_with_day_start(single_user_env, tm
     (args, kw), = calls
     assert args[0] is ctx and args[1] is client and args[2] is state and args[3] == tmp_path / "day.mp4"
     assert args[4] == datetime(2026, 10, 26) and kw == {"title": "A title", "description": "chapters"}
-    assert storage.kind == "youtube" and storage.uses_quota and not storage.needs_browser_audio
+    assert storage.kind == "youtube" and storage.uses_quota
 
 
 def test_youtube_check_wraps_failures_in_storage_error(single_user_env, tmp_path):

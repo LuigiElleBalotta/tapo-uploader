@@ -62,9 +62,11 @@ default, and when accounts are enabled each account may override it. The pipelin
     `StoredItem.url` (youtube.com watch page; the file in the user's own cloud for WebDAV, which needs their login
     there). Where a kind has no external address (local, rclone) `url` is `None` and only "Watch here" is shown.
     The link opens in a new tab with `rel="noopener noreferrer"`. Italian copy: "Guarda qui" / "Vai al video".
-10b. **Audio for browsers.** Tapo audio is often G.711, which browsers do not play. For non-YouTube destinations the
-    uploader remuxes with `-c:v copy -c:a aac` when the file has a non-AAC audio track (first test of the plan:
-    check the codec of real files). YouTube keeps receiving the file untouched.
+10b. **Audio and video codecs for browsers: nothing to convert.** `ffmpeg_cmd` already re-encodes the camera's
+    audio to AAC while recording (`-c:a aac`), so no G.711 ever reaches the MP4 (ffmpeg cannot even write it
+    there); the video is copied as H.264, which every browser plays. Only a camera switched to H.265 would give
+    files some browsers cannot play: the README says to keep H.264. (The first draft planned an audio conversion
+    step; it was dropped when a real ffmpeg test showed the premise was wrong.)
 11. **Failure behaviour** is the same as today: a failed upload keeps the clip, reports status, retries with
     backoff; a wrong setting is caught earlier by the "Test" button calling `check()`.
 12. **Single-user env:** `STORAGE`, `WEBDAV_URL`, `WEBDAV_USER`, `WEBDAV_PASS`, `LOCAL_ROOT`, `RCLONE_REMOTE`,

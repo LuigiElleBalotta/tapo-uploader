@@ -8,7 +8,6 @@ class YouTubeStorage(Storage):
     kind = "youtube"
     uses_quota = True            # videos.insert costs 1600 of the project's 10,000 daily units
     browsable = False            # the personal page lists the channel's playlists itself
-    needs_browser_audio = False  # YouTube transcodes whatever it gets
 
     def __init__(self, ctx, state=None):
         self.ctx, self.state, self._client = ctx, state, None
