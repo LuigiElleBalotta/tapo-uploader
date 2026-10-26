@@ -623,6 +623,20 @@ a "Test connection" button, and an administrator page. Sign-in is configurable: 
    8080), or as a service with `deploy/tapo-web.service`, or in Docker with
    `CMD ["python", "-u", "-m", "tapo_web", "run"]`. Behind one reverse proxy set `TRUSTED_PROXY_HOPS=1`, otherwise every visitor looks like the proxy and the login attempt limits cannot tell them apart. It is not meant for Render's free plan (ephemeral disk).
 
+### Docker image
+
+Every push to `main` publishes a multi-architecture image (amd64 and arm64, so also a Raspberry Pi) to GitHub
+Container Registry: `ghcr.io/luigiellebalotta/tapo-uploader:latest`, plus `:sha-XXXXXXX` and, for releases, `:1.2.3`.
+Nothing to clone or build:
+
+```bash
+docker run -d --name tapo-web --restart unless-stopped -p 127.0.0.1:8080:8080   --env-file tapo-web.env -v tapo-data:/data   ghcr.io/luigiellebalotta/tapo-uploader:latest python -u -m tapo_web run
+# update later: docker pull ghcr.io/luigiellebalotta/tapo-uploader:latest, then remove and run the container again
+```
+
+`deploy/docker-compose.yml` does the same with `docker compose up -d` (update with `docker compose pull && docker compose up -d`).
+The image's default command is the single-user motion mode (`tapo_motion.py run`).
+
 ### Adding a friend's camera
 
 The friend signs in, then **Connect YouTube** (their own channel), then **Add a camera** (their dynamic DNS name,

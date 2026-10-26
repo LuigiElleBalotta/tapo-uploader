@@ -592,6 +592,20 @@ account locali e/o **Nextcloud** (i suoi gruppi diventano ruoli). Password e tok
    8080), oppure come servizio con `deploy/tapo-web.service`, oppure in Docker con
    `CMD ["python", "-u", "-m", "tapo_web", "run"]`. Dietro un reverse proxy imposta `TRUSTED_PROXY_HOPS=1`, altrimenti ogni visitatore sembra il proxy e i limiti ai tentativi di accesso non li distinguono. Non è pensata per il piano gratuito di Render (disco effimero).
 
+### Immagine Docker
+
+A ogni push su `main` viene pubblicata un'immagine multi-architettura (amd64 e arm64, quindi anche Raspberry Pi) su
+GitHub Container Registry: `ghcr.io/luigiellebalotta/tapo-uploader:latest`, più `:sha-XXXXXXX` e, per le release,
+`:1.2.3`. Non serve clonare né costruire niente:
+
+```bash
+docker run -d --name tapo-web --restart unless-stopped -p 127.0.0.1:8080:8080   --env-file tapo-web.env -v tapo-data:/data   ghcr.io/luigiellebalotta/tapo-uploader:latest python -u -m tapo_web run
+# per aggiornare: docker pull ghcr.io/luigiellebalotta/tapo-uploader:latest, poi rimuovi e riavvia il container
+```
+
+`deploy/docker-compose.yml` fa lo stesso con `docker compose up -d` (aggiornamento: `docker compose pull && docker compose up -d`).
+Il comando predefinito dell'immagine è la modalità a movimento per un solo utente (`tapo_motion.py run`).
+
 ### Aggiungere la camera di un amico
 
 L'amico accede, poi **Connect YouTube** (il suo canale), poi **Add a camera** (il suo nome DDNS e l'account camera

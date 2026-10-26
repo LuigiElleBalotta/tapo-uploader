@@ -1,0 +1,23 @@
+# The multi-account web app from the published image. Copy this file next to a tapo-web.env (see .env.example,
+# multi-account block), then: docker compose up -d
+# Put an HTTPS reverse proxy (nginx, Caddy, aaPanel) in front of 127.0.0.1:8080.
+services:
+  tapo-web:
+    image: ghcr.io/luigiellebalotta/tapo-uploader:latest
+    command: ["python", "-u", "-m", "tapo_web", "run"]
+    restart: unless-stopped
+    env_file: tapo-web.env
+    environment:
+      TZ: Europe/Rome
+      HOST: 0.0.0.0
+      PORT: "8080"
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - tapo-data:/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+volumes:
+  tapo-data:

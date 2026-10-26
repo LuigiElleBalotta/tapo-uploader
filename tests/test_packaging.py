@@ -71,3 +71,24 @@ def test_privacy_policy_covers_what_google_and_users_need():
 def test_readmes_tell_people_to_use_their_own_google_pages():
     assert "Use your own pages, not this project's" in read("README.md")
     assert "Usa le tue pagine, non quelle di questo progetto" in read("README_IT.md")
+
+
+def test_workflow_tests_then_publishes_a_multi_arch_image_to_ghcr():
+    flow = read(".github/workflows/docker.yml")
+    for needed in ("ghcr.io/luigiellebalotta/tapo-uploader", "packages: write", "linux/amd64,linux/arm64",
+                   "python -m pytest tests", "needs: test", "type=raw,value=latest", "type=semver"):
+        assert needed in flow, needed
+    assert "github.event_name != 'pull_request'" in flow  # pull requests never publish
+    assert flow.count("packages: write") == 1 and "pull_request_target" not in flow
+
+
+def test_compose_file_runs_the_web_app_from_the_published_image():
+    compose = read("deploy/docker-compose.yml")
+    assert "ghcr.io/luigiellebalotta/tapo-uploader" in compose and "tapo_web" in compose
+    assert "127.0.0.1:8080:8080" in compose and "no-new-privileges" in compose
+
+
+def test_readmes_document_the_docker_image():
+    for name in ("README.md", "README_IT.md"):
+        text = read(name)
+        assert "ghcr.io/luigiellebalotta/tapo-uploader" in text and "docker-compose.yml" in text, name
