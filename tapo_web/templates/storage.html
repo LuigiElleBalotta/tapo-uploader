@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Recordings · tapo-uploader{% endblock %}
+{% block content %}
+<h1 class="h3">Where your recordings go</h1>
+{% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
+{% if result %}<div class="alert alert-{{ result[0] }}" role="alert">{{ result[1] }}</div>{% endif %}
+{% if resolved.notice %}<div class="alert alert-warning" role="alert">{{ resolved.notice }}</div>{% endif %}
+<div class="card app-card">
+  <p><span class="mi" aria-hidden="true">cloud_upload</span> Right now: <strong>{{ label }}</strong>
+    <span class="text-muted">({% if resolved.source == 'own' %}your own setting{% else %}the server's default{% endif %})</span></p>
+  {% if resolved.kind == 'youtube' %}
+    <p class="text-muted">Videos are uploaded to your YouTube channel as private, one playlist per day.
+      <a href="{{ url_for('youtube_page') }}">Manage the YouTube link</a>.</p>
+  {% else %}
+    <p class="text-muted">Videos are saved there, one folder per day. You watch them from your page.</p>
+  {% endif %}
+</div>
+{% if allow_own %}
+<div class="card app-card">
+  <h2 class="h5">Use a different destination</h2>
+  <form method="post" action="{{ url_for('storage_save') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-group">
+      <label for="kind">Destination</label>
+      <select class="form-control" id="kind" name="kind">
+        <option value="default" {% if values.kind == 'default' %}selected{% endif %}>The server's default ({{ server_label }})</option>
+        {% for kind in kinds %}<option value="{{ kind }}" {% if values.kind == kind %}selected{% endif %}>{{ labels[kind] }}</option>{% endfor %}
+      </select>
+    </div>
+    {% if 'webdav' in kinds %}
+    <fieldset>
+      <legend class="h6">WebDAV settings (only for WebDAV)</legend>
+      <div class="form-group">
+        <label for="url">Address</label>
+        <input class="form-control" id="url" name="url" type="url" value="{{ values.url }}" placeholder="https://cloud.example.com/remote.php/dav/files/YOU" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label for="user">User</label>
+        <input class="form-control" id="user" name="user" value="{{ values.user }}" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input class="form-control" id="password" name="password" type="password" autocomplete="new-password" placeholder="{% if has_password %}Saved: leave empty to keep it{% else %}For Nextcloud with two-factor, use an app password{% endif %}">
+      </div>
+      <div class="form-group">
+        <label for="folder">Folder (optional)</label>
+        <input class="form-control" id="folder" name="folder" value="{{ values.folder }}" placeholder="Tapo" autocomplete="off">
+      </div>
+    </fieldset>
+    {% endif %}
+    <button class="btn btn-primary btn-round" type="submit">Save</button>
+    {% if 'webdav' in kinds %}<button class="btn btn-neutral btn-round" type="submit" formaction="{{ url_for('storage_test') }}">Test the connection</button>{% endif %}
+  </form>
+</div>
+{% endif %}
+{% endblock %}

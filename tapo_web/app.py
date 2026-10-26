@@ -142,6 +142,8 @@ def create_app(settings: Settings, db: Database = None):
     register_nextcloud(app)
     from .youtube_link import register as register_youtube
     register_youtube(app)
+    from .storage_page import register as register_storage
+    register_storage(app)
     from .cameras import register as register_cameras
     register_cameras(app)
     from .dashboard import register as register_dashboard
