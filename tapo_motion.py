@@ -36,6 +36,7 @@ from googleapiclient.errors import HttpError
 
 import tapo_uploader as base
 from camera_context import CameraContext
+from tapo_storage.base import StorageError
 from tapo_uploader import FILE_RE, log
 
 # the camera's subscription is short-lived: ask for a new one before it expires
@@ -275,7 +276,19 @@ def due_days(ctx, force=False):
             yield day_dir
 
 
-def upload_day(ctx, yt, state, day_dir, report=_ignore):
+def storage_for(ctx, state=None):
+    """The destination of this camera's daily video: the one the context carries, YouTube otherwise."""
+    if ctx.storage is not None:
+        return ctx.storage
+    from tapo_storage.youtube import YouTubeStorage
+    return YouTubeStorage(ctx, state)
+
+
+def prepare_for_browser(path):
+    return path  # replaced by the real audio conversion in tapo_storage.audio
+
+
+def upload_day(ctx, storage, day_dir, report=_ignore):
     clips = sorted(day_dir.glob("[0-9]*.mp4"))
     if not clips:
         day_dir.rmdir()
@@ -293,10 +306,11 @@ def upload_day(ctx, yt, state, day_dir, report=_ignore):
     description = "\n".join(lines[:120])  # YouTube allows 5000 characters
     day_file = day_dir / "day.mp4"
     join(clips, day_file)
-    base.upload(ctx, yt, state, day_file, first, title=title, description=description)
+    to_send = prepare_for_browser(day_file) if storage.needs_browser_audio else day_file
+    storage.put(to_send, f"{first:%Y-%m-%d}", title, description)
     report("uploaded", title)
     # delete only what was uploaded: a clip saved meanwhile waits for the next upload
-    for path in clips + [day_file]:
+    for path in clips + [day_file, to_send]:
         path.unlink(missing_ok=True)
     try:
         day_dir.rmdir()
@@ -308,13 +322,16 @@ def upload_pending(ctx, state, force=False, report=_ignore, gate=None):
     """Upload the days that are due. A `gate` (multi-account mode) keeps the shared YouTube quota: it says when
     this camera may upload and is charged after every upload."""
     days = list(due_days(ctx, force))
+    storage = storage_for(ctx, state)
+    if not storage.uses_quota:
+        gate = None  # only YouTube spends the shared API quota
     if not days or (gate and not gate.allowed()):
         return
-    yt = base.youtube_client(ctx)
+    storage.connect()
     for day_dir in days:
         if gate and not gate.allowed():
             return
-        upload_day(ctx, yt, state, day_dir, report)
+        upload_day(ctx, storage, day_dir, report)
         if gate:
             gate.charge()
 
@@ -334,6 +351,9 @@ def daily_loop(ctx, stop, report=_ignore, gate=None):
                 continue
             log.exception("YouTube error")
             report("error", f"YouTube error: {ctx.scrub(str(err))}")
+        except StorageError as err:
+            log.error("upload failed: %s", ctx.scrub(str(err)))
+            report("error", ctx.scrub(str(err)))
         except Exception as err:
             log.exception("daily upload failed")
             report("error", ctx.scrub(str(err)))
@@ -389,7 +409,10 @@ def health_server(port):
 def cmd_run():
     from camera_worker import CameraWorker
     ctx = CameraContext.from_env()
-    base.youtube_client(ctx)  # fail fast if not authorised
+    try:
+        storage_for(ctx).check()  # fail fast if the destination is not usable (YouTube: not authorised)
+    except StorageError as err:
+        sys.exit(str(err))
     if os.getenv("PORT"):  # set by web-service hosts (Render): they need something listening
         health_server(int(os.environ["PORT"]))
     ctx.ensure_dirs()

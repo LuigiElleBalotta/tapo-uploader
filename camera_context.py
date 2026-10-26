@@ -53,6 +53,8 @@ class CameraContext:
     events_name: str = "events"
     # returns an authorised YouTube client; None means the single-user token/client files are used
     youtube: Optional[Callable] = None
+    # where the daily video goes (a tapo_storage.Storage); None means YouTube through `youtube` / the token files
+    storage: Optional[object] = None
 
     def credentials(self):
         return f"{quote(self.user, safe='')}:{quote(self.password, safe='')}"

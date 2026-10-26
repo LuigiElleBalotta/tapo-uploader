@@ -48,6 +48,10 @@ class Storage:
     browsable = True            # days()/list_day()/open() work
     needs_browser_audio = True  # the file is meant to be played in a browser
 
+    def connect(self) -> None:
+        """Get ready to upload; raises what the destination raises (a revoked token, ...). Called before the
+        day's clips are joined, so a destination that is not reachable costs nothing."""
+
     def check(self) -> None:
         raise NotImplementedError
 
@@ -70,4 +74,7 @@ def make_storage(kind, config, ctx, host_check=None):
     if kind == "local":
         from .local import LocalStorage
         return LocalStorage(Path(config["root"]), prefix)
+    if kind == "youtube":
+        from .youtube import YouTubeStorage
+        return YouTubeStorage(ctx, config.get("state"))
     raise StorageError(f"unknown storage kind '{kind}'")
