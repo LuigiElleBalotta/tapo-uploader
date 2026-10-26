@@ -134,4 +134,7 @@ def create_app(settings: Settings, db: Database = None):
     def home():
         return render_template("home.html")
 
+    from .auth_nextcloud import register as register_nextcloud
+    register_nextcloud(app)
+
     return app

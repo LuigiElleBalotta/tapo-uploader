@@ -106,3 +106,10 @@ def test_events_are_purged_by_age(db):
     db.add_event(cam, "motion", "new")
     db.purge_events(30)
     assert [e["detail"] for e in db.events_for_camera(cam)] == ["new"]
+
+
+def test_update_user_profile(db):
+    uid = db.add_user("nextcloud", "a", "Old Name", "user")
+    db.update_user_profile(uid, "New Name", "admin")
+    user = db.user_by_id(uid)
+    assert user["display_name"] == "New Name" and user["role"] == "admin"

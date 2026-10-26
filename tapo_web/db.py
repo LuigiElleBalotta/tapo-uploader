@@ -126,6 +126,9 @@ class Database:
     def set_user_role(self, user_id, role):
         self._run("UPDATE users SET role = ? WHERE id = ?", (role, user_id))
 
+    def update_user_profile(self, user_id, display_name, role):
+        self._run("UPDATE users SET display_name = ?, role = ? WHERE id = ?", (display_name, role, user_id))
+
     def delete_user(self, user_id):
         self._run("DELETE FROM users WHERE id = ?", (user_id,))
 
