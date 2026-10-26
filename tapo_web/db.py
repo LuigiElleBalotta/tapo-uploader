@@ -145,6 +145,11 @@ class Database:
         """Not scoped to a user: for the supervisor, never for a request on behalf of a user."""
         return self._one("SELECT * FROM cameras WHERE id = ?", (camera_id,))
 
+    def all_cameras_with_owner(self):
+        """Every camera with its owner's name: for the administrator's page only."""
+        return self._all("SELECT cameras.*, users.display_name AS owner_name FROM cameras "
+                         "JOIN users ON users.id = cameras.user_id ORDER BY cameras.id")
+
     def camera_for_user(self, user_id, camera_id):
         return self._one("SELECT * FROM cameras WHERE id = ? AND user_id = ?", (camera_id, user_id))
 

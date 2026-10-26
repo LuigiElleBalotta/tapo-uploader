@@ -138,5 +138,7 @@ def create_app(settings: Settings, db: Database = None):
     register_cameras(app)
     from .dashboard import register as register_dashboard
     register_dashboard(app)
+    from .admin import register as register_admin
+    register_admin(app)
 
     return app

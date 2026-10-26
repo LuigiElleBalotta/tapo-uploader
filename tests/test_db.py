@@ -147,3 +147,10 @@ def test_events_newest_first_even_with_equal_times(db):
     for kind in ("first", "second", "third"):
         db.add_event(cam, kind, "", ts=1000.0)
     assert [e["kind"] for e in db.events_for_camera(cam)] == ["third", "second", "first"]
+
+
+def test_all_cameras_with_owner(db):
+    a = db.add_user("local", "alice", "Alice A", "user")
+    cam = db.add_camera(a, "Garden", "h", 40010, 40020, "stream1", "u", "p")
+    rows = db.all_cameras_with_owner()
+    assert [(r["id"], r["name"], r["owner_name"]) for r in rows] == [(cam, "Garden", "Alice A")]
