@@ -658,7 +658,7 @@ destinazione sul server **il server conserva i video**: pianifica lo spazio disc
 **Guardare:** in modalità multi-account la pagina personale mostra ogni video come una card con due azioni.
 **Watch here** (Guarda qui) apre un player nella pagina (il player incorporato di YouTube, oppure l'app stessa che invia il
 file, con la possibilità di scorrere, solo al suo proprietario). **Open the video** (Vai al video) porta al video su
-YouTube o al file nel tuo cloud (niente per cartella locale o rclone). L'audio viene convertito in AAC durante la
+YouTube o al file nel tuo cloud (niente per cartella locale o rclone). YouTube non riproduce i video **privati** (il valore predefinito) dentro un altro sito, quindi per quelli la card ha solo **Open the video**; **Watch here** compare per i video pubblici e non in elenco e per ogni altra destinazione. L'audio viene convertito in AAC durante la
 registrazione e il video è copiato così com'è: tieni la camera su H.264, perché i file H.265 potrebbero non partire in
 alcuni browser.
 

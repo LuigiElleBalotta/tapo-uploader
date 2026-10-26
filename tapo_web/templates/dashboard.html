@@ -16,7 +16,7 @@
         <span class="video-title">{{ video.title }}</span>
         <span class="text-muted video-date">{{ video.published }}{% if video.size %} · {{ video.size }}{% endif %}</span>
         <div class="video-actions">
-          <button class="btn btn-primary btn-sm btn-round" type="button" data-watch>Watch here</button>
+          {% if video.watchable %}<button class="btn btn-primary btn-sm btn-round" type="button" data-watch>Watch here</button>{% endif %}
           {% if video.url %}<a class="btn btn-neutral btn-sm btn-round" href="{{ video.url }}" target="_blank" rel="noopener noreferrer">Open the video</a>{% endif %}
         </div>
       </div>
@@ -76,6 +76,7 @@
 <div class="alert alert-warning" role="alert">YouTube did not answer just now. Your videos are safe; try again in a few minutes.</div>
 {% else %}
 <p class="text-muted">Channel: <strong>{{ youtube.channel }}</strong> · <a href="/youtube">manage</a></p>
+{% if youtube.has_private %}<p class="text-muted"><span class="mi small" aria-hidden="true">lock</span> Private videos cannot be played inside another site: open them on YouTube, where you are signed in.</p>{% endif %}
 {{ video_groups(youtube.playlists, "No daily playlist yet. The first one appears after the first upload.") }}
 {% endif %}
 {% endif %}

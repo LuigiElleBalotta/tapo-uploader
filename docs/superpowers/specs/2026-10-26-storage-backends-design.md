@@ -56,6 +56,7 @@ default, and when accounts are enabled each account may override it. The pipelin
     the vault credentials; local: `send_file` conditional; rclone: `rclone cat --offset/--count`). The CSP gains
     `media-src 'self'`. Every request checks the session and that the camera belongs to the user (admins excepted);
     item ids are database/listing ids, never paths. All four kinds are therefore browsable.
+10c. **Private YouTube videos cannot be embedded** (checked on the live site: "the video is private" with both `youtube-nocookie.com` and `youtube.com`). The card of a private YouTube video therefore has no "Watch here", only "Open the video", plus a note; public and unlisted videos and every file destination keep both.
 10a. **Two actions per video card: "Watch here" and "Open the video".** Each video on the personal page is a card
     with both buttons. "Watch here" opens the player (above) inline and loads the iframe/`<video>` only on click, so
     the page stays light and nothing is requested from YouTube until needed. "Open the video" is a plain link to

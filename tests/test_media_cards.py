@@ -50,7 +50,7 @@ def test_youtube_card_has_both_actions_and_embed_id(tmp_path):
     add_camera(env, env.alice)
     link(env, env.alice, "token-alice")
     env.app.extensions["tapo"]["youtube_builder"] = lambda credentials: FakeYoutube(
-        [{"items": [playlist("P", f"Tapo {DAY}")]}], {"P": [item("abc123", "clip")]})
+        [{"items": [playlist("P", f"Tapo {DAY}")]}], {"P": [item("abc123", "clip", privacy="unlisted")]})
     text = page(env, "alice", "correct horse").get_data(as_text=True)
     assert 'data-kind="youtube"' in text and 'data-ref="abc123"' in text and "Watch here" in text
     anchors = buttons(text)
@@ -114,7 +114,7 @@ def test_hostile_video_ids_and_names_are_escaped(tmp_path):
     link(env, env.alice, "token-alice")
     bad = 'x"><script>alert(1)</script>'
     env.app.extensions["tapo"]["youtube_builder"] = lambda credentials: FakeYoutube(
-        [{"items": [playlist("P", f"Tapo {DAY}")]}], {"P": [item(bad, "t")]})
+        [{"items": [playlist("P", f"Tapo {DAY}")]}], {"P": [item(bad, "t", privacy="unlisted")]})
     text = page(env, "alice", "correct horse").get_data(as_text=True)
     assert "<script>alert(1)" not in text and 'data-ref="x&#34;&gt;&lt;script&gt;' in text
 
@@ -125,3 +125,33 @@ def test_notice_about_an_ignored_setting_is_shown_with_a_link(tmp_path):
     env.db.save_storage_config(env.alice, "webdav", env.vault.encrypt(json.dumps({"url": "https://x.example/dav"})))
     text = page(env, "alice", "correct horse").get_data(as_text=True)
     assert "no longer allowed" in text and 'href="/storage"' in text
+
+
+def test_private_youtube_video_has_no_watch_here_but_keeps_the_link_and_a_note(tmp_path):
+    env = make(tmp_path)
+    add_camera(env, env.alice)
+    link(env, env.alice, "token-alice")
+    env.app.extensions["tapo"]["youtube_builder"] = lambda credentials: FakeYoutube(
+        [{"items": [playlist("P", f"Tapo {DAY}")]}], {"P": [item("secret1", "clip", privacy="private")]})
+    text = page(env, "alice", "correct horse").get_data(as_text=True)
+    assert "Watch here" not in text and "data-watch" not in text
+    assert len(buttons(text)) == 1 and "watch?v=secret1" in buttons(text)[0]
+    assert "Private videos" in text and "open them on YouTube" in text
+
+
+def test_note_about_private_videos_is_absent_when_every_video_can_be_watched(tmp_path):
+    env = make(tmp_path)
+    add_camera(env, env.alice)
+    link(env, env.alice, "token-alice")
+    env.app.extensions["tapo"]["youtube_builder"] = lambda credentials: FakeYoutube(
+        [{"items": [playlist("P", f"Tapo {DAY}")]}], {"P": [item("pub1", "clip", privacy="public")]})
+    text = page(env, "alice", "correct horse").get_data(as_text=True)
+    assert "Watch here" in text and "Private videos" not in text
+
+
+def test_file_videos_are_always_watchable(tmp_path):
+    env = make(tmp_path, storage="local", storage_local_root=str(tmp_path / "videos"))
+    cid = add_camera(env, env.alice)
+    put_video(env, env.alice, cid)
+    text = page(env, "alice", "correct horse").get_data(as_text=True)
+    assert "Watch here" in text and "Private videos" not in text

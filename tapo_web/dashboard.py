@@ -74,13 +74,15 @@ def list_playlists(yt, prefix=PLAYLIST_PREFIX, limit=10):
     found.sort(key=lambda p: p["snippet"]["title"], reverse=True)
     result = []
     for entry in found[:limit]:
-        items = yt.playlistItems().list(part="snippet", playlistId=entry["id"], maxResults=25).execute().get("items", [])
+        items = yt.playlistItems().list(part="snippet,status", playlistId=entry["id"], maxResults=25).execute().get("items", [])
         videos = []
         for video in items:
             snippet = video["snippet"]
             video_id = snippet["resourceId"]["videoId"]
             videos.append({"id": video_id, "kind": "youtube", "ref": video_id, "title": snippet.get("title", ""),
                            "thumbnail": _thumbnail(snippet),
+                           # YouTube never plays a private video inside another site, whatever the domain
+                           "watchable": (video.get("status") or {}).get("privacyStatus") in ("public", "unlisted"),
                            "published": (snippet.get("publishedAt") or "")[:10],
                            "url": f"https://www.youtube.com/watch?v={quote(video_id, safe='')}"})
         result.append({"id": entry["id"], "title": entry["snippet"]["title"],
@@ -105,7 +107,7 @@ def list_files(storage, camera_id, prefix=PLAYLIST_PREFIX, label="", limit=10):
     groups = []
     for day in storage.days(limit):
         videos = [{"kind": "file", "ref": f"/media/{camera_id}/{day}/{quote(video.name, safe='')}",
-                   "title": video.name[:-4] if video.name.endswith(".mp4") else video.name, "thumbnail": None,
+                   "title": video.name[:-4] if video.name.endswith(".mp4") else video.name, "thumbnail": None, "watchable": True,
                    "published": video.modified, "url": video.url, "size": size_label(video.size)}
                   for video in storage.list_day(day)]
         groups.append({"id": day, "title": f"{label}{prefix} {day}", "url": None, "videos": videos})
@@ -141,8 +143,9 @@ def register(app):
             def load():
                 yt = youtube_for_user(db, vault, settings, user_id, builder=state["youtube_builder"])
                 return list_playlists(yt)
-            return {"linked": True, "channel": link["channel_title"],
-                    "playlists": cache.get((user_id, link["linked_at"]), load)}
+            playlists = cache.get((user_id, link["linked_at"]), load)
+            return {"linked": True, "channel": link["channel_title"], "playlists": playlists,
+                    "has_private": any(not v["watchable"] for p in playlists for v in p["videos"])}
         except LinkRevoked:
             return {"linked": True, "channel": link["channel_title"], "problem": "revoked"}
         except Exception as err:  # YouTube down, quota, network: the page must still open

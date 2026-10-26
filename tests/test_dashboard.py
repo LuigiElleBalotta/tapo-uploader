@@ -39,6 +39,7 @@ class FakeYoutube:
         return Call(self, "playlists", self.pages[0 if pageToken is None else int(pageToken)])
 
     def list_items(self, part=None, playlistId=None, maxResults=None):
+        self.item_parts = getattr(self, "item_parts", []) + [part]
         return Call(self, f"items:{playlistId}", {"items": self.items.get(playlistId, [])})
 
 
@@ -46,10 +47,13 @@ def playlist(pid, title):
     return {"id": pid, "snippet": {"title": title}}
 
 
-def item(video_id, title, thumb=None, published="2026-10-26T20:00:00Z"):
+def item(video_id, title, thumb=None, published="2026-10-26T20:00:00Z", privacy=None):
     thumbs = {"medium": {"url": thumb or f"https://i.ytimg.com/vi/{video_id}/mqdefault.jpg"}}
-    return {"snippet": {"title": title, "publishedAt": published, "thumbnails": thumbs,
-                        "resourceId": {"videoId": video_id}}}
+    entry = {"snippet": {"title": title, "publishedAt": published, "thumbnails": thumbs,
+                         "resourceId": {"videoId": video_id}}}
+    if privacy:
+        entry["status"] = {"privacyStatus": privacy}
+    return entry
 
 
 # ----- listing -----
@@ -214,3 +218,17 @@ def test_dashboard_has_no_edit_or_delete_video_controls(tmp_path):
         [{"items": [playlist("P", "Tapo 2026-10-26")]}], {"P": [item("v", "clip")]})
     text = page(env, "alice", "correct horse").get_data(as_text=True).lower()
     assert "delete video" not in text and "/videos" not in text and "remove from playlist" not in text
+
+
+def test_playlist_items_are_asked_for_their_privacy_status():
+    yt = FakeYoutube([{"items": [playlist("P", "Tapo 2026-10-26")]}], {"P": [item("v", "clip", privacy="private")]})
+    list_playlists(yt, "Tapo")
+    assert yt.item_parts == ["snippet,status"]
+
+
+def test_only_public_and_unlisted_videos_can_be_watched_in_the_page():
+    entries = [item("pub", "a", privacy="public"), item("unl", "b", privacy="unlisted"),
+               item("pri", "c", privacy="private"), item("unk", "d")]  # no status at all: do not promise a player
+    yt = FakeYoutube([{"items": [playlist("P", "Tapo 2026-10-26")]}], {"P": entries})
+    videos = {v["id"]: v["watchable"] for v in list_playlists(yt, "Tapo")[0]["videos"]}
+    assert videos == {"pub": True, "unl": True, "pri": False, "unk": False}

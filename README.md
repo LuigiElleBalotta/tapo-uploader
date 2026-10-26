@@ -690,7 +690,7 @@ and who can read it.
 **Watching:** in multi-account mode the personal page shows every video as a card with two actions. **Watch here**
 opens a player on the page (YouTube's embedded player, or the app itself streaming the file, with seeking, only to
 its owner). **Open the video** goes to the video on YouTube, or to the file in your own cloud (nothing for a local
-folder or rclone). The audio is converted to AAC while recording and the video is copied as it comes: keep the
+folder or rclone). YouTube does not play **private** videos (the default) inside another site, so for those the card only has **Open the video**; **Watch here** appears for public and unlisted videos and for every other destination. The audio is converted to AAC while recording and the video is copied as it comes: keep the
 camera on H.264, because H.265 files may not play in some browsers.
 
 ---
