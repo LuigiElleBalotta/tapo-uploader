@@ -1,0 +1,73 @@
+"""The storage interface every destination implements, and the naming rules they share."""
+import re
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional
+
+CHUNK = 1024 * 1024
+_MAX_NAME = 150
+
+
+class StorageError(Exception):
+    """A destination failed in a way worth showing to the user as is."""
+
+
+@dataclass(frozen=True)
+class StoredItem:
+    name: str
+    day: str
+    size: Optional[int]
+    modified: str
+    url: Optional[str]
+
+
+def safe_filename(title):
+    """A remote file name that is safe on every destination: no separators, colons or control characters."""
+    stem = title[:-4] if title.lower().endswith(".mp4") else title
+    stem = stem.replace(":", "-")
+    stem = "".join(c if (c.isalnum() or c in " ._-()") else "_" for c in stem)
+    stem = stem.lstrip(". ")[:_MAX_NAME].rstrip(" ")
+    return f"{stem or 'video'}.mp4"
+
+
+def day_folder(prefix, day):
+    return f"{prefix} {day}"
+
+
+DAY_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def sidecar_name(name):
+    """The chapters file next to a video: 'x.mp4' -> 'x.chapters.txt'."""
+    return f"{name[:-4] if name.endswith('.mp4') else name}.chapters.txt"
+
+
+class Storage:
+    kind = ""
+    uses_quota = False          # only YouTube spends the shared API quota
+    browsable = True            # days()/list_day()/open() work
+    needs_browser_audio = True  # the file is meant to be played in a browser
+
+    def check(self) -> None:
+        raise NotImplementedError
+
+    def put(self, path: Path, day: str, title: str, description: str = "") -> StoredItem:
+        raise NotImplementedError
+
+    def days(self, limit: int = 10) -> list:
+        raise StorageError(f"{self.kind} cannot list recordings")
+
+    def list_day(self, day: str) -> list:
+        raise StorageError(f"{self.kind} cannot list recordings")
+
+    def open(self, day: str, name: str, start: int = 0, end: Optional[int] = None) -> tuple:
+        """(chunks, total size); `end` is inclusive, None means the end of the file."""
+        raise StorageError(f"{self.kind} cannot play recordings")
+
+
+def make_storage(kind, config, ctx, host_check=None):
+    prefix = config.get("prefix") or (ctx.playlist_prefix if ctx is not None else "Tapo")
+    if kind == "local":
+        from .local import LocalStorage
+        return LocalStorage(Path(config["root"]), prefix)
+    raise StorageError(f"unknown storage kind '{kind}'")
