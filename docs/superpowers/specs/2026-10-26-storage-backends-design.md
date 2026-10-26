@@ -56,6 +56,12 @@ default, and when accounts are enabled each account may override it. The pipelin
     the vault credentials; local: `send_file` conditional; rclone: `rclone cat --offset/--count`). The CSP gains
     `media-src 'self'`. Every request checks the session and that the camera belongs to the user (admins excepted);
     item ids are database/listing ids, never paths. All four kinds are therefore browsable.
+10a. **Two actions per video card: "Watch here" and "Open the video".** Each video on the personal page is a card
+    with both buttons. "Watch here" opens the player (above) inline and loads the iframe/`<video>` only on click, so
+    the page stays light and nothing is requested from YouTube until needed. "Open the video" is a plain link to
+    `StoredItem.url` (youtube.com watch page; the file in the user's own cloud for WebDAV, which needs their login
+    there). Where a kind has no external address (local, rclone) `url` is `None` and only "Watch here" is shown.
+    The link opens in a new tab with `rel="noopener noreferrer"`. Italian copy: "Guarda qui" / "Vai al video".
 10b. **Audio for browsers.** Tapo audio is often G.711, which browsers do not play. For non-YouTube destinations the
     uploader remuxes with `-c:v copy -c:a aac` when the file has a non-AAC audio track (first test of the plan:
     check the codec of real files). YouTube keeps receiving the file untouched.
