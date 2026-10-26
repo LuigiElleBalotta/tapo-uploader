@@ -79,6 +79,10 @@ class CameraContext:
     def state_file(self):
         return self.data_dir / "state.json"
 
+    def ensure_dirs(self):
+        for path in (self.data_dir, self.record_dir, self.buffer_dir, self.events_dir):
+            path.mkdir(parents=True, exist_ok=True)
+
     @classmethod
     def from_env(cls):
         host = _env("CAMERA_HOST")

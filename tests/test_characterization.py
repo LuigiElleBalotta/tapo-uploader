@@ -35,17 +35,17 @@ def _reply(name, value):
 
 
 def test_motion_states_value_before_name(single_user_env):
-    motion_states = single_user_env.motion.motion_states
-    assert list(motion_states(_reply("IsMotion", "true"))) == [("IsMotion", True)]
-    assert list(motion_states(_reply("IsPeople", "false"))) == [("IsPeople", False)]
-    assert list(motion_states(_reply("Other", "true"))) == []
+    motion_states, ctx = single_user_env.motion.motion_states, _ctx()
+    assert list(motion_states(ctx, _reply("IsMotion", "true"))) == [("IsMotion", True)]
+    assert list(motion_states(ctx, _reply("IsPeople", "false"))) == [("IsPeople", False)]
+    assert list(motion_states(ctx, _reply("Other", "true"))) == []
 
 
 def test_on_motion_extends_window(single_user_env):
-    motion = single_user_env.motion
-    assert motion.on_motion(None, 100.0) == motion.Event(100.0, 400.0)
-    assert motion.on_motion(motion.Event(100.0, 400.0), 380.0).end == 680.0
-    assert motion.on_motion(motion.Event(100.0, 400.0), 200.0).end == 400.0
+    motion, ctx = single_user_env.motion, _ctx()
+    assert motion.on_motion(ctx, None, 100.0) == motion.Event(100.0, 400.0)
+    assert motion.on_motion(ctx, motion.Event(100.0, 400.0), 380.0).end == 680.0
+    assert motion.on_motion(ctx, motion.Event(100.0, 400.0), 200.0).end == 400.0
 
 
 def test_timestamp(single_user_env):
@@ -54,12 +54,12 @@ def test_timestamp(single_user_env):
 
 
 def test_segments_sorted(single_user_env):
-    motion = single_user_env.motion
-    motion.BUFFER_DIR.mkdir(parents=True, exist_ok=True)
-    (motion.BUFFER_DIR / "20261026_100000.mp4").write_bytes(b"")
-    (motion.BUFFER_DIR / "20261026_095950.mp4").write_bytes(b"")
-    (motion.BUFFER_DIR / "notes.txt").write_bytes(b"")
-    assert [path.name for _, path in motion.segments()] == ["20261026_095950.mp4", "20261026_100000.mp4"]
+    motion, ctx = single_user_env.motion, _ctx()
+    ctx.buffer_dir.mkdir(parents=True, exist_ok=True)
+    (ctx.buffer_dir / "20261026_100000.mp4").write_bytes(b"")
+    (ctx.buffer_dir / "20261026_095950.mp4").write_bytes(b"")
+    (ctx.buffer_dir / "notes.txt").write_bytes(b"")
+    assert [path.name for _, path in motion.segments(ctx)] == ["20261026_095950.mp4", "20261026_100000.mp4"]
 
 
 def _fixed_now(motion, monkeypatch, moment):
@@ -72,13 +72,13 @@ def _fixed_now(motion, monkeypatch, moment):
 
 
 def test_due_days(single_user_env, monkeypatch):
-    motion = single_user_env.motion
-    motion.EVENTS_DIR.mkdir(parents=True, exist_ok=True)
-    (motion.EVENTS_DIR / "20261025").mkdir()
-    (motion.EVENTS_DIR / "20261026").mkdir()
-    monkeypatch.setattr(motion, "UPLOAD_AT", time(21, 0))
+    motion, ctx = single_user_env.motion, _ctx()
+    ctx.events_dir.mkdir(parents=True, exist_ok=True)
+    (ctx.events_dir / "20261025").mkdir()
+    (ctx.events_dir / "20261026").mkdir()
+    assert ctx.upload_at == time(21, 0)
     _fixed_now(motion, monkeypatch, datetime(2026, 10, 26, 12, 0, 0))
-    assert [p.name for p in motion.due_days()] == ["20261025"]
-    assert [p.name for p in motion.due_days(force=True)] == ["20261025", "20261026"]
+    assert [p.name for p in motion.due_days(ctx)] == ["20261025"]
+    assert [p.name for p in motion.due_days(ctx, force=True)] == ["20261025", "20261026"]
     _fixed_now(motion, monkeypatch, datetime(2026, 10, 26, 21, 30, 0))
-    assert [p.name for p in motion.due_days()] == ["20261025", "20261026"]
+    assert [p.name for p in motion.due_days(ctx)] == ["20261025", "20261026"]
