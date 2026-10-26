@@ -2,19 +2,24 @@
 from datetime import datetime, time
 
 
+def _ctx():
+    import camera_context
+    return camera_context.CameraContext.from_env()
+
+
 def test_rtsp_url_quotes_credentials(single_user_env):
-    url = single_user_env.uploader.rtsp_url()
+    url = _ctx().rtsp_url()
     assert url == "rtsp://cam:p%40ss%3Aw%21rd@192.168.1.37:554/stream1"
 
 
 def test_scrub_hides_password(single_user_env):
-    uploader = single_user_env.uploader
-    assert uploader.scrub(uploader.rtsp_url()) == "rtsp://***@192.168.1.37:554/stream1"
+    ctx = _ctx()
+    assert ctx.scrub(ctx.rtsp_url()) == "rtsp://***@192.168.1.37:554/stream1"
 
 
 def test_ffmpeg_cmd_segments(single_user_env, tmp_path):
     out_dir = tmp_path / "rec"
-    cmd = single_user_env.uploader.ffmpeg_cmd(out_dir, 21600)
+    cmd = single_user_env.uploader.ffmpeg_cmd(_ctx(), out_dir, 21600)
     assert cmd[:4] == ["ffmpeg", "-hide_banner", "-loglevel", "error"]
     joined = " ".join(cmd)
     assert "-c:v copy" in joined

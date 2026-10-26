@@ -32,7 +32,15 @@ from datetime import datetime, timezone
 from googleapiclient.errors import HttpError
 
 import tapo_uploader as base
-from tapo_uploader import DATA, FILE_RE, env, log, scrub
+from camera_context import CameraContext
+from tapo_uploader import DATA, FILE_RE, env, log
+
+# provisional until the module is moved onto explicit contexts (plan task 3)
+CTX = CameraContext.from_env()
+
+
+def scrub(text):
+    return CTX.scrub(text)
 
 PRE = int(env("MOTION_PRE_SECONDS", "30"))
 POST = int(env("MOTION_POST_SECONDS", "300"))
@@ -289,7 +297,7 @@ def upload_day(yt, state, day_dir):
     description = "\n".join(lines[:120])  # YouTube allows 5000 characters
     day_file = day_dir / "day.mp4"
     join(clips, day_file)
-    base.upload(yt, state, day_file, first, title=title, description=description)
+    base.upload(CTX, yt, state, day_file, first, title=title, description=description)
     # delete only what was uploaded: a clip saved meanwhile waits for the next upload
     for path in clips + [day_file]:
         path.unlink(missing_ok=True)
@@ -303,13 +311,13 @@ def upload_pending(state, force=False):
     days = list(due_days(force))
     if not days:
         return
-    yt = base.youtube_client()
+    yt = base.youtube_client(CTX)
     for day_dir in days:
         upload_day(yt, state, day_dir)
 
 
 def daily_loop(stop):
-    state = base.load_state()
+    state = base.load_state(CTX)
     while not stop.is_set():
         try:
             upload_pending(state)
@@ -342,7 +350,7 @@ def cmd_listen():
 
 
 def cmd_upload():
-    upload_pending(base.load_state(), force=True)
+    upload_pending(base.load_state(CTX), force=True)
 
 
 def health_server(port):
@@ -368,7 +376,7 @@ def health_server(port):
 
 
 def cmd_run():
-    base.youtube_client()  # fail fast if not authorised
+    base.youtube_client(CTX)  # fail fast if not authorised
     if os.getenv("PORT"):  # set by web-service hosts (Render): they need something listening
         health_server(int(os.environ["PORT"]))
     BUFFER_DIR.mkdir(exist_ok=True)
@@ -377,7 +385,7 @@ def cmd_run():
         path.unlink(missing_ok=True)  # leftovers of a previous run
     events, stop = queue.Queue(), threading.Event()
     threads = [
-        threading.Thread(target=base.record_loop, args=(BUFFER_DIR, SEGMENT, stop)),
+        threading.Thread(target=base.record_loop, args=(CTX, BUFFER_DIR, SEGMENT, stop)),
         threading.Thread(target=onvif_loop, args=(events, stop)),
         threading.Thread(target=controller, args=(events, stop)),
         threading.Thread(target=daily_loop, args=(stop,)),
