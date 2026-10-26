@@ -125,6 +125,15 @@ Per uso personale non serve alcuna verifica da parte di Google, ma il pulsante
 - un link alla **privacy policy**,
 - il **dominio autorizzato** corrispondente.
 
+> **Usa le tue pagine, non quelle di questo progetto.** Google controlla che home page e privacy policy
+> appartengano al dominio di chi possiede l'app e che descrivano *quell'*app. La policy di questo repository
+> indica il suo autore come responsabile e descrive il server dell'autore: sulla tua app sarebbe sbagliata e
+> potrebbe far respingere la verifica di Google. Copia `index.html` e `privacy.html` (licenza MIT) e **riscrivi
+> la privacy policy per il tuo uso**: chi gestisce il servizio, cosa viene salvato e chi lo usa (solo tu, oppure
+> altre persone sul tuo server: in quel caso scrivilo e indica i servizi coinvolti). Un link al progetto nella tua
+> home page fa piacere ma non è obbligatorio. Ognuno che esegue il software ha bisogno della propria app Google e
+> delle proprie pagine.
+
 Non serve un sito vero: bastano due pagine statiche. Il modo più veloce è **GitHub Pages**:
 
 1. Crea un repository pubblico (anche questo va bene) con due file, `index.html` (una riga

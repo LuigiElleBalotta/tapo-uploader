@@ -166,6 +166,14 @@ Google needs no verification, but the **Publish app** button stays disabled unti
 - a link to the **privacy policy**,
 - the matching **authorized domain**.
 
+> **Use your own pages, not this project's.** Google checks that the home page and the privacy policy belong to
+> the domain of whoever owns the app, and that they describe *that* app. The policy in this repository names its
+> author as the person responsible and describes the author's own server, so it would be wrong on your app and
+> could fail Google's review. Copy `index.html` and `privacy.html` (MIT licensed) and **rewrite the privacy policy
+> for your own use**: who runs it, what is stored, and who can use it (just you, or other people on your server:
+> then say so, and name the services involved). A link back to this project on your home page is appreciated but
+> not required. Each person who runs the software needs their own Google app and their own pages.
+
 You don't need a real website, only two static pages. The quickest way is **GitHub Pages**:
 
 1. Create a public repository (this one works) with two files: `index.html` (one line about what

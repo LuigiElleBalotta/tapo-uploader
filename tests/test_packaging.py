@@ -66,3 +66,8 @@ def test_privacy_policy_covers_what_google_and_users_need():
     refs = re.findall(r'<(?:link|script|img)\b[^>]*?(?:href|src)="([^"]+)"', html)
     own = "https://luigiellebalotta.github.io/tapo-uploader/"
     assert not [r for r in refs if re.match(r"^(https?:)?//", r) and not r.startswith(own)]
+
+
+def test_readmes_tell_people_to_use_their_own_google_pages():
+    assert "Use your own pages, not this project's" in read("README.md")
+    assert "Usa le tue pagine, non quelle di questo progetto" in read("README_IT.md")
