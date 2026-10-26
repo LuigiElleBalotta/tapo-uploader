@@ -1,147 +1,190 @@
-# tapo-uploader
+# tapo-uploader: Tapo camera to YouTube uploader
 
-Registra lo stream di una telecamera **TP-Link Tapo** (testato su C200) e carica da solo i
-video su **YouTube come privati**, con una **playlist per ogni giorno**. Dopo l'upload il file
-viene cancellato dal disco.
+🌐 **English** · [Italiano](README_IT.md)
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+[![ffmpeg](https://img.shields.io/badge/ffmpeg-no%20re--encoding-orange.svg)](https://ffmpeg.org/)
+[![YouTube Data API v3](https://img.shields.io/badge/YouTube%20Data%20API-v3-red.svg)](https://developers.google.com/youtube/v3)
+[![Docker](https://img.shields.io/badge/docker-ready-2496ED.svg)](Dockerfile)
+
+**Record your TP-Link Tapo camera (tested on the Tapo C200) only when it detects motion, and upload
+the footage to YouTube as private videos, with one playlist per day. No cloud subscription, no
+firmware hacking, no storage to buy.**
+
+The Tapo C200 can't upload to YouTube or Google Drive by itself. `tapo-uploader` is a small Python
+service that pulls the camera's **RTSP** stream with **ffmpeg**, listens for **ONVIF** motion
+events, and publishes the result through the official **YouTube Data API v3**. After each upload the
+local file is deleted, so it runs for free on a Raspberry Pi, a cheap VPS, a mini PC or a Docker
+container.
 
 ```
- Tapo C200 ──RTSP──▶ ffmpeg ──▶ segmenti .mp4 ──▶ YouTube API ──▶ playlist "Tapo 2026-10-26"
- (casa)                        (cartella recordings/)             (video privati, file cancellato)
+ Tapo C200 ──RTSP──▶ ffmpeg ──▶ 30 s before + 5 min after each motion ──▶ one private YouTube video a day
+ (home)    ──ONVIF motion events──▶                                       playlist "Tapo 2026-10-26"
+                                                                          (local files deleted after upload)
 ```
 
-Ci sono **due modalità**: la registrazione continua a segmenti (`tapo_uploader.py`, descritta
-sotto) e quella **solo attorno ai movimenti con un video al giorno** (`tapo_motion.py`, vedi
-[Modalità a movimento](#modalità-a-movimento-un-video-al-giorno)).
+## Features
 
-La telecamera non sa caricare nulla da sola: serve un computer sempre acceso (un VPS, un
-Raspberry Pi, un mini PC) che legga lo stream e faccia l'upload. Questa guida racconta il
-setup completo, passo per passo, com'è stato fatto davvero, compresi i problemi incontrati.
+- **Motion-triggered recording.** Keeps 30 seconds *before* the detection and 5 minutes *after*;
+  motion near the end of the window extends it. All times are configurable.
+- **One video per day.** Clips are joined without re-encoding and uploaded once a day (21:00 by
+  default), with the time of every event as YouTube chapters in the description.
+- **Or continuous recording.** 6-hour segments, each uploaded as its own video.
+- **Private by default.** Videos go to your own channel as `private`, grouped in a daily playlist
+  named `Tapo YYYY-MM-DD`.
+- **Frees the disk.** Files are deleted right after a successful upload.
+- **No re-encoding.** `ffmpeg -c copy`: close to zero CPU, so a Raspberry Pi is plenty.
+- **Resilient.** Restarts ffmpeg when the stream drops, retries failed uploads, handles the YouTube
+  quota, survives reboots (fragmented MP4 stays playable even if killed).
+- **Credentials never logged.** The camera password is masked in every log line.
+- **Runs anywhere.** systemd unit, `Dockerfile`, and Render blueprints included.
+- **A complete, honest guide.** Every step of a real setup is documented, including the dead ends.
 
-- [Cosa fa e cosa serve](#cosa-fa-e-cosa-serve)
-- [1. La telecamera](#1-la-telecamera)
-- [2. Google Cloud e YouTube](#2-google-cloud-e-youtube)
-- [3. Installazione e prova sul tuo PC](#3-installazione-e-prova-sul-tuo-pc)
-- [Dove farlo girare](#dove-farlo-girare)
-- [4. Il server](#4-il-server)
-- [5. Raggiungere la camera da internet](#5-raggiungere-la-camera-da-internet)
-- [6. Verifica finale](#6-verifica-finale)
-- [Modalità a movimento: un video al giorno](#modalità-a-movimento-un-video-al-giorno)
-- [Uso quotidiano](#uso-quotidiano)
-- [Configurazione](#configurazione)
-- [Come funziona](#come-funziona)
-- [Quota YouTube](#quota-youtube)
-- [Sicurezza](#sicurezza)
-- [Problemi comuni](#problemi-comuni)
+## Contents
+
+- [How it works](#how-it-works)
+- [Requirements](#requirements)
+- [1. The camera](#1-the-camera)
+- [2. Google Cloud and YouTube](#2-google-cloud-and-youtube)
+- [3. Install and test on your PC](#3-install-and-test-on-your-pc)
+- [Where to run it](#where-to-run-it)
+- [4. The server](#4-the-server)
+- [5. Reaching the camera from the internet](#5-reaching-the-camera-from-the-internet)
+- [6. Final check](#6-final-check)
+- [Motion mode: one video per day](#motion-mode-one-video-per-day)
+- [Daily use](#daily-use)
+- [Configuration](#configuration)
+- [Under the hood](#under-the-hood)
+- [YouTube quota](#youtube-quota)
+- [Security](#security)
+- [Troubleshooting](#troubleshooting)
+- [FAQ](#faq)
+- [License](#license)
 
 ---
 
-## Cosa fa e cosa serve
+## How it works
 
-`tapo_uploader.py run` avvia due thread:
+There are **two modes**. Both use the same camera, the same YouTube login and the same `.env`.
 
-1. **Registrazione.** ffmpeg legge lo stream RTSP con `-c copy` (il video non viene
-   ricodificato, quindi quasi nessun carico CPU) e scrive file `AAAAMMGG_HHMMSS.mp4` in
-   `recordings/`. I tagli sono allineati all'orologio: con segmenti da 6 ore si chiudono a
-   00:00, 06:00, 12:00 e 18:00. Se lo stream cade, ffmpeg riparte da solo.
-2. **Upload.** Ogni minuto cerca i segmenti completi, li carica come video `private` col
-   titolo `Tapo AAAA-MM-GG HH:MM-HH:MM`, li aggiunge alla playlist `Tapo AAAA-MM-GG` (creata
-   se manca) e **cancella il file**. Se l'upload fallisce, il file resta e viene ritentato.
+| | Continuous (`tapo_uploader.py`) | Motion (`tapo_motion.py`) |
+|---|---|---|
+| Records | Everything, in 6-hour segments | Only around motion: 30 s before, 5 min after |
+| Uploads | Each segment as soon as it closes | One video a day, at a fixed time |
+| Disk use | A few GB at most | Almost nothing (about one minute of buffer) |
+| Needs | RTSP | RTSP + ONVIF events (port 2020) |
+| YouTube quota | 4 uploads/day | 1 upload/day |
 
-| Cosa serve | Note |
+`tapo_uploader.py run` starts two threads:
+
+1. **Recording.** ffmpeg reads the RTSP stream with `-c copy` (the video is not re-encoded) and
+   writes `YYYYMMDD_HHMMSS.mp4` files into `recordings/`. Cuts are aligned to the wall clock: with
+   6-hour segments they close at 00:00, 06:00, 12:00 and 18:00. If the stream drops, ffmpeg restarts.
+2. **Upload.** Every minute it looks for finished segments, uploads them as `private` videos titled
+   `Tapo YYYY-MM-DD HH:MM-HH:MM`, adds them to the playlist `Tapo YYYY-MM-DD` (created if missing)
+   and **deletes the file**. If an upload fails the file stays and is retried.
+
+The camera can't upload on its own, so you need an always-on computer that can reach it: a Raspberry
+Pi or mini PC at home, a VPS, or a container host.
+
+## Requirements
+
+| You need | Notes |
 |---|---|
-| Telecamera Tapo con RTSP | C200 e simili. Serve l'"Account camera" (vedi passo 1). |
-| Un computer sempre acceso | Linux consigliato (VPS, Raspberry Pi). Python 3.10 o più recente e ffmpeg. |
-| Un account Google con un canale YouTube | I video finiscono nel suo canale. |
-| Accesso al router (solo se il server non è in casa) | Per aprire una porta verso la camera. |
+| A Tapo camera with RTSP | Tested on the **Tapo C200**. You need the "Camera Account" (step 1). |
+| An always-on computer | Linux recommended (VPS, Raspberry Pi). Python 3.10+ and ffmpeg. |
+| A Google account with a YouTube channel | The videos land in its channel. |
+| Router access (only if the server is not at home) | To open a port towards the camera. |
 
-Spazio disco: a 640×360 un segmento da 6 ore pesa circa 0,4 GB. Servono pochi GB liberi,
-perché i file vengono cancellati dopo l'upload.
+Disk: at 640×360 a 6-hour segment is about 0.4 GB. A few free GB are enough because files are
+deleted after upload. Bandwidth: about 1 MB per minute of video.
+
+Other ONVIF cameras that expose RTSP may work, but only the Tapo C200 has been tested.
 
 ---
 
-## 1. La telecamera
+## 1. The camera
 
-1. Nell'app Tapo apri la camera, poi **Impostazioni (ingranaggio) → Avanzate → Account camera**.
-   Crea un nome utente e una password **solo per la camera**. Non sono quelli del tuo account
-   Tapo/cloud, ed è un errore comune: con quelli ricevi `401 Unauthorized`.
-2. Cerca l'indirizzo IP della camera nell'app (Info dispositivo) o nel router, e meglio
-   ancora assegnale un IP fisso (prenotazione DHCP) nel router.
-3. Imposta la qualità video su **Alta** (Impostazioni → Qualità video). Di default può essere
-   bassa: nel nostro caso entrambi gli stream erano 640×360.
-4. L'indirizzo dello stream è:
+1. In the Tapo app open the camera, then **Settings (gear) → Advanced → Camera Account**. Create a
+   username and password **just for the camera**. They are *not* your Tapo/cloud account: using
+   those is the most common mistake and gives `401 Unauthorized`.
+2. Find the camera's IP address in the app (Device Info) or in your router, and ideally give it a
+   fixed IP (DHCP reservation) in the router.
+3. Set the video quality to **High** (Settings → Video Quality). It may default to low: in our case
+   both streams were 640×360.
+4. The stream address is:
 
    ```
-   rtsp://UTENTE:PASSWORD@IP_CAMERA:554/stream1     (qualità alta)
-   rtsp://UTENTE:PASSWORD@IP_CAMERA:554/stream2     (qualità bassa)
+   rtsp://USER:PASSWORD@CAMERA_IP:554/stream1     (high quality)
+   rtsp://USER:PASSWORD@CAMERA_IP:554/stream2     (low quality)
    ```
 
-   Se la password ha caratteri speciali (`!`, `@`, `:`) vanno codificati nell'URL. Lo script
-   lo fa da solo, a mano è più semplice usare una password solo con lettere e numeri.
+   If the password contains special characters (`!`, `@`, `:`) they must be URL-encoded. The script
+   does it for you; by hand, a letters-and-digits password is easier.
 
-> **Limite importante:** la camera accetta **una sola sessione RTSP per stream**. Se il servizio
-> sta registrando `stream1`, un secondo programma che apre `stream1` riceve
-> `Operation not permitted`. Per fare prove mentre il servizio gira usa `stream2`
-> (`CAMERA_STREAM=stream2`) oppure ferma prima il servizio.
-
----
-
-## 2. Google Cloud e YouTube
-
-Lo script carica sul tuo canale con l'API ufficiale (YouTube Data API v3), quindi serve un
-piccolo "progetto" Google che identifichi l'app. È gratis.
-
-### 2.1 Progetto e API
-
-1. Vai su <https://console.cloud.google.com/projectcreate>, nome `tapo-uploader`, **Crea**.
-2. Apri <https://console.cloud.google.com/apis/library/youtube.googleapis.com> e premi
-   **Abilita** (con il progetto appena creato selezionato in alto).
-
-### 2.2 Schermata di consenso OAuth
-
-1. Apri <https://console.cloud.google.com/auth/overview> e premi **Inizia**.
-2. Nome app `tapo-uploader`, email di assistenza = la tua.
-3. Pubblico: **Esterno**. Email di contatto = la tua. Accetta e **Crea**.
-4. In **Pubblico → Utenti di test → Add users** aggiungi **il tuo account Google**, quello
-   proprietario del canale YouTube.
-
-### 2.3 Credenziali
-
-1. **Client → Crea client**. Tipo: **App desktop**, nome `tapo-uploader`. **Crea**.
-2. Premi **Scarica JSON** e salva il file come `client_secret.json` nella cartella del progetto.
-   È un segreto: non committarlo (il `.gitignore` lo esclude).
-
-### 2.4 Pubblicare l'app (importante)
-
-Finché l'app resta in **Test**, il token di accesso **scade dopo 7 giorni** e lo script smette
-di caricare finché non rifai il login. Per evitarlo bisogna pubblicare l'app ("In produzione").
-Per uso personale non serve alcuna verifica da parte di Google, ma il pulsante
-**Pubblica app** resta disattivato finché in **Branding** non ci sono:
-
-- un link alla **home page** dell'app,
-- un link alla **privacy policy**,
-- il **dominio autorizzato** corrispondente.
-
-Non serve un sito vero: bastano due pagine statiche. Il modo più veloce è **GitHub Pages**:
-
-1. Crea un repository pubblico (anche questo va bene) con due file, `index.html` (una riga
-   su cosa fa l'app) e `privacy.html` (cosa accede, cosa viene salvato, come revocare
-   l'accesso). In questo repository ci sono entrambi, da copiare e adattare.
-2. In *Settings → Pages* scegli il ramo `main`, cartella `/`.
-3. Dopo un minuto le pagine sono su `https://TUOUTENTE.github.io/NOME-REPO/`.
-4. In Google Cloud, **Branding → Dominio app**: inserisci home page e privacy policy; in
-   **Domini autorizzati → Aggiungi dominio** metti `TUOUTENTE.github.io`. Salva.
-5. **Pubblico → Pubblica app → Conferma** ("Eseguire il push in produzione?").
-
-> Fai la pubblicazione **prima** di creare il token (passo 3). Un token creato mentre l'app
-> era in Test può restare soggetto alla scadenza di 7 giorni anche dopo la pubblicazione: per
-> sicurezza cancella `token.json` e rifai `auth` dopo aver pubblicato.
+> **Important limit:** the camera accepts **one RTSP session per stream**. While the service records
+> `stream1`, a second program opening `stream1` gets `Operation not permitted`. To experiment while
+> the service runs, use `stream2` (`CAMERA_STREAM=stream2`) or stop the service first.
 
 ---
 
-## 3. Installazione e prova sul tuo PC
+## 2. Google Cloud and YouTube
 
-Questi passi valgono su qualunque sistema (Windows, macOS, Linux). Servono Python 3.10+ e
-**ffmpeg** nel PATH (`ffmpeg -version` per controllare).
+The script uploads to your channel through the official YouTube Data API v3, so you need a small
+Google "project" that identifies the app. It is free.
+
+### 2.1 Project and API
+
+1. Go to <https://console.cloud.google.com/projectcreate>, name it `tapo-uploader`, **Create**.
+2. Open <https://console.cloud.google.com/apis/library/youtube.googleapis.com> and press **Enable**
+   (with the new project selected at the top).
+
+### 2.2 OAuth consent screen
+
+1. Open <https://console.cloud.google.com/auth/overview> and press **Get started**.
+2. App name `tapo-uploader`, support email = yours.
+3. Audience: **External**. Contact email = yours. Accept and **Create**.
+4. Under **Audience → Test users → Add users** add **your own Google account**, the one that owns
+   the YouTube channel.
+
+### 2.3 Credentials
+
+1. **Clients → Create client**. Type: **Desktop app**, name `tapo-uploader`. **Create**.
+2. Press **Download JSON** and save it as `client_secret.json` in the project folder. It is a
+   secret: don't commit it (`.gitignore` excludes it).
+
+### 2.4 Publish the app (important)
+
+While the app stays in **Testing**, the access token **expires after 7 days** and the script stops
+uploading until you log in again. To avoid it, publish the app ("In production"). For personal use
+Google needs no verification, but the **Publish app** button stays disabled until **Branding** has:
+
+- a link to the app **home page**,
+- a link to the **privacy policy**,
+- the matching **authorized domain**.
+
+You don't need a real website, only two static pages. The quickest way is **GitHub Pages**:
+
+1. Create a public repository (this one works) with two files: `index.html` (one line about what
+   the app does) and `privacy.html` (what it accesses, what is stored, how to revoke access). This
+   repository has both, ready to copy and adapt.
+2. In *Settings → Pages* choose the `main` branch, folder `/`.
+3. After a minute the pages are at `https://YOURUSER.github.io/REPO-NAME/`.
+4. In Google Cloud, **Branding → App domain**: enter the home page and privacy policy; under
+   **Authorized domains → Add domain** put `YOURUSER.github.io`. Save.
+5. **Audience → Publish app → Confirm** ("Push to production?").
+
+> Publish **before** creating the token (step 3). A token created while the app was in Testing can
+> stay subject to the 7-day expiry even after publishing: to be safe, delete `token.json` and run
+> `auth` again after publishing.
+
+---
+
+## 3. Install and test on your PC
+
+These steps work on any system (Windows, macOS, Linux). You need Python 3.10+ and **ffmpeg** in the
+PATH (`ffmpeg -version` to check).
 
 ```bash
 git clone https://github.com/LuigiElleBalotta/tapo-uploader.git
@@ -149,513 +192,573 @@ cd tapo-uploader
 python -m venv .venv
 . .venv/bin/activate            # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env            # poi compila CAMERA_USER, CAMERA_PASS, CAMERA_HOST
+cp .env.example .env            # then fill in CAMERA_USER, CAMERA_PASS, CAMERA_HOST
 ```
 
-Metti `client_secret.json` (passo 2.3) nella cartella, poi:
+Put `client_secret.json` (step 2.3) in the folder, then:
 
 ```bash
-python tapo_uploader.py check   # 1. la camera risponde? mostra codec e risoluzione
-python tapo_uploader.py auth    # 2. login Google, una volta sola: crea token.json
-python tapo_uploader.py test    # 3. registra 60 s e li carica: verifica tutto
+python tapo_uploader.py check   # 1. does the camera answer? prints codec and resolution
+python tapo_uploader.py auth    # 2. Google login, once: creates token.json
+python tapo_uploader.py test    # 3. records 60 s and uploads them: checks everything
 ```
 
-- **`check`** deve stampare `codec_name=h264`, la risoluzione e l'audio. Se dà
-  `401 Unauthorized` le credenziali sono sbagliate; `Operation not permitted` vuol dire che
-  lo stream è già occupato (vedi sopra).
-- **`auth`** stampa un indirizzo: aprilo in un browser **sullo stesso computer**, scegli
-  l'account Google del canale e consenti l'accesso a YouTube. Il browser mostra
-  "The authentication flow has completed" e compare `token.json`. Se in Test vedi
-  "Google non ha verificato questa app": *Avanzate → Vai a tapo-uploader*.
-- **`test`** registra 60 secondi, li carica come video privato e crea la playlist del
-  giorno. Controlla su YouTube che il video ci sia e poi cancellalo dallo Studio.
+- **`check`** must print `codec_name=h264`, the resolution and the audio. `401 Unauthorized` means
+  wrong credentials; `Operation not permitted` means the stream is already in use (see above).
+- **`auth`** prints an address: open it in a browser **on the same computer**, choose the Google
+  account of the channel and allow YouTube access. The browser shows "The authentication flow has
+  completed" and `token.json` appears. If, while in Testing, you see "Google hasn't verified this
+  app": *Advanced → Go to tapo-uploader*.
+- **`test`** records 60 seconds, uploads them as a private video and creates the day's playlist.
+  Check that the video is on YouTube, then delete it from Studio.
 
-Se il server non ha un browser, fai `auth` sul tuo PC e copia `token.json` sul server.
+If the server has no browser, run `auth` on your PC and copy `token.json` to the server.
 
 ---
 
-## Dove farlo girare
+## Where to run it
 
-Il programma deve restare acceso 24 ore su 24 e deve poter raggiungere la camera. Le opzioni,
-dalla più semplice:
+The program must stay on 24/7 and be able to reach the camera. The options, simplest first:
 
-| Dove | Costo indicativo | Come raggiunge la camera | Note |
+| Where | Rough cost | How it reaches the camera | Notes |
 |---|---|---|---|
-| **Raspberry Pi / mini PC in casa** | una tantum, 15–50 € | in LAN | **Consigliato**: niente port forwarding, niente DDNS, niente IP da proteggere. |
-| **VPS** (come in questa guida) | pochi euro al mese | port forwarding limitato all'IP fisso del VPS | Passi 4 e 5. È la configurazione collaudata. |
-| **Render** (Background Worker) | da circa 7 $/mese, più 0,25 $/GB di disco | port forwarding verso gli IP condivisi di Render | Immagine Docker inclusa, **non collaudata**. Vedi sotto. |
-| **Render gratuito** (web service) | 0 € | port forwarding verso gli IP condivisi di Render | Collaudato fino all'avvio, non con la camera. Disco effimero: si possono perdere clip. Vedi sotto. |
-| **Vercel** | – | – | **Non adatto.** Vedi sotto. |
+| **Raspberry Pi / mini PC at home** | one-off, about $15–50 | LAN | **Recommended**: no port forwarding, no DDNS, no exposed camera. |
+| **VPS** (as in this guide) | a few dollars a month | port forwarding limited to the VPS's fixed IP | Steps 4 and 5. This is the tested setup. |
+| **Render** (Background Worker) | about $7/month, plus $0.25/GB of disk | port forwarding to Render's shared IPs | Docker image included, **not tested**. See below. |
+| **Render free** (web service) | $0 | port forwarding to Render's shared IPs | Tested up to startup, not with the camera. Ephemeral disk: clips can be lost. See below. |
+| **Vercel** | – | – | **Not suitable.** See below. |
 
-Le altre piattaforme con container (Fly.io, Railway) seguono lo stesso schema di Render: il
-`Dockerfile` funziona ovunque, cambiano prezzi e rete.
+Other container platforms (Fly.io, Railway) follow the same pattern as Render: the `Dockerfile`
+works anywhere, only prices and networking change.
 
-### Render
+### Render (paid Background Worker)
 
-Render può far girare un processo sempre acceso (un *Background Worker*) da un'immagine
-Docker. Il repository contiene `Dockerfile` e `render.yaml`. Cose da sapere:
+Render can run an always-on process (a *Background Worker*) from a Docker image. The repository
+contains `Dockerfile` and `render.yaml`. Things to know:
 
-- **Costo.** Il worker più piccolo (`0.5c-512mb`: 0,5 CPU e 512 MB) è elencato a 7 $/mese. Il
-  piano gratuito di Render è solo per i servizi web, non per i worker. Con ffmpeg in `-c copy` la
-  CPU non è il limite; la RAM non l'ho misurata su Render.
-- **Disco.** Il disco del container si perde a ogni riavvio e a ogni deploy. Senza un **disco
-  persistente** (0,25 $/GB al mese, 1 GB bastano; si attacca a un worker) si perdono il token, lo
-  stato e i clip della giornata prima delle 21:00. Il `render.yaml` ne chiede uno montato su
-  `/data`, e lo script lo usa grazie a `DATA_DIR`.
-- **Segreti.** Su un container non ci sono file da copiare: `token.json` e `client_secret.json` si
-  passano come variabili d'ambiente `YOUTUBE_TOKEN_JSON` e `YOUTUBE_CLIENT_SECRET_JSON` (il contenuto
-  dei file). Alla prima partenza lo script li scrive su `/data` con permessi `600`; dopo, il token
-  rinnovato resta sul disco. Il login (`auth`) si fa una volta sul tuo PC.
-- **La rete è il punto debole.** Gli IP in uscita di Render sono **condivisi da tutti i servizi
-  della stessa regione** e un servizio può usare uno qualsiasi degli indirizzi del suo intervallo
-  (vedi [la documentazione di Render](https://render.com/docs/outbound-ip-addresses)). Per
-  restringere l'accesso alla camera dovresti aprire il port forwarding a **tutti gli intervalli
-  della regione**, quindi anche ad altri clienti di Render, e il router ZTE accetta un solo
-  intervallo per regola. Gli IP dedicati esistono ma, dalle informazioni che ho trovato, sono
-  a pagamento sui piani Pro/Scale (circa 100 $/mese per un gruppo di IP): per questo uso non
-  conviene. Se scegli Render, la porta esposta dev'essere protetta da una password **lunga e
-  unica**, con porta esterna non standard; oppure collega casa e Render con una VPN, cosa che non
-  ho verificato.
+- **Cost.** The smallest worker (`0.5c-512mb`: 0.5 CPU and 512 MB) is listed at $7/month. Render's
+  free plan is for web services only, not workers. With ffmpeg in `-c copy` mode CPU is not the
+  limit; RAM was not measured on Render.
+- **Disk.** The container's disk is lost on every restart and deploy. Without a **persistent disk**
+  ($0.25/GB per month, 1 GB is enough; it attaches to a worker) the token, the state and the day's
+  clips are lost. `render.yaml` asks for one mounted at `/data`, and the script uses it through
+  `DATA_DIR`.
+- **Secrets.** A container has no files to copy: `token.json` and `client_secret.json` are passed as
+  the environment variables `YOUTUBE_TOKEN_JSON` and `YOUTUBE_CLIENT_SECRET_JSON` (the files'
+  contents). On first start the script writes them to `/data` with mode `600`; afterwards the
+  refreshed token stays on disk. The login (`auth`) is done once on your PC.
+- **Networking is the weak point.** Render's outbound IPs are **shared by every service in the same
+  region**, and a service may use any address in its range (see
+  [Render's docs](https://render.com/docs/outbound-ip-addresses)). To restrict access to the camera
+  you would open port forwarding to **all of the region's ranges**, so to other Render customers
+  too. Dedicated IPs exist but, from the information found, are paid and only on Pro/Scale plans
+  (about $100/month per set of IPs): not worth it for this. If you pick Render, the exposed port
+  must be protected by a **long, unique password** and a non-standard external port; or connect home
+  and Render with a VPN, which was not verified.
 
-Passi: collega il repository a Render (**New → Blueprint**), compila le variabili che chiede
+Steps: connect the repository to Render (**New → Blueprint**), fill in the variables it asks for
 (`CAMERA_USER`, `CAMERA_PASS`, `CAMERA_HOST`/`CAMERA_PORT`, `ONVIF_HOST`/`ONVIF_PORT`,
-`YOUTUBE_TOKEN_JSON`, `YOUTUBE_CLIENT_SECRET_JSON`), apri sul router le porte verso gli IP di
-Render e guarda i log del worker. Render chiede le variabili solo alla creazione del Blueprint:
-cambiarle dopo si fa dal pannello. Per la registrazione continua invece di quella a movimento
-decommenta `dockerCommand` nel `render.yaml`.
+`YOUTUBE_TOKEN_JSON`, `YOUTUBE_CLIENT_SECRET_JSON`), open the router ports to Render's IPs and watch
+the worker's logs. Render only asks for the variables when the Blueprint is created: later you
+change them in the dashboard. For continuous recording instead of motion mode, uncomment
+`dockerCommand` in `render.yaml`.
 
-### Render gratuito (senza VPS)
+### Render free (no VPS)
 
-Per chi non ha un server. Il **VPS resta la scelta principale**: questa è un'alternativa a costo
-zero, con limiti precisi. Il deploy come *web service* sul piano `free` è stato provato su Render
-fino all'avvio (build, `health endpoint on port 10000`, `ffmpeg start`); **la registrazione dalla
-camera tramite Render non è stata verificata**, perché richiede le regole del router descritte
-sotto.
+For people without a server. The **VPS remains the main choice**: this is a zero-cost alternative
+with precise limits. Deploying as a *web service* on the `free` plan was tried on Render up to
+startup (build, `health endpoint on port 10000`, `ffmpeg start`); **recording from the camera
+through Render was not verified**, because it needs the router rules described below.
 
-Come funziona: il programma apre una piccola porta HTTP (`/health`, attiva quando Render imposta
-`PORT`) e un servizio di monitoraggio gratuito (UptimeRobot, cron-job.org) la chiama ogni 5
-minuti. Per la [documentazione di Render](https://render.com/docs/free) un servizio gratuito
-dorme dopo 15 minuti **senza traffico in entrata**; il traffico in uscita non conta, quindi serve
-una chiamata dall'esterno. Le 750 ore gratuite al mese bastano per un solo servizio sempre acceso.
+How it works: the program opens a small HTTP port (`/health`, active when Render sets `PORT`) and
+a free monitoring service (UptimeRobot, cron-job.org) calls it every 5 minutes. Per
+[Render's documentation](https://render.com/docs/free) a free service sleeps after 15 minutes
+**without inbound traffic**; outbound traffic doesn't count, so a call from outside is needed. The
+750 free monthly hours are enough for one always-on service.
 
-**Passi (quelli fatti davvero, dal pannello):**
+**Steps (the ones actually done, from the dashboard):**
 
-1. Su [dashboard.render.com](https://dashboard.render.com) fai **New → Web Service**, scheda
-   **Public Git Repository**, incolla l'URL del repository e premi **Connect**. Render riconosce il
-   `Dockerfile` da solo.
-2. In **Compute** scegli la riga **$0 / month (0,1 CPU, 512 MB)**. Il piano preselezionato è quello
-   da 7 $/mese: se lo lasci, paghi.
-3. In **Environment Variables** premi **Add from .env** e incolla le righe qui sotto con i tuoi
-   valori. Il token e il client secret vanno su **una sola riga**, come JSON compatto
+1. On [dashboard.render.com](https://dashboard.render.com) choose **New → Web Service**, the
+   **Public Git Repository** tab, paste the repository URL and press **Connect**. Render detects the
+   `Dockerfile` by itself.
+2. Under **Compute** pick the **$0 / month (0.1 CPU, 512 MB)** row. The preselected plan is the
+   $7/month one: if you leave it, you pay.
+3. Under **Environment Variables** press **Add from .env** and paste the lines below with your
+   values. The token and client secret must be on **a single line**, as compact JSON
    (`python -c "import json;print(json.dumps(json.load(open('token.json')),separators=(',',':')))"`).
    ```
    CAMERA_USER=...
    CAMERA_PASS=...
-   CAMERA_HOST=il-tuo-nome-ddns.example.com
-   CAMERA_PORT=porta esterna RTSP
-   ONVIF_HOST=il-tuo-nome-ddns.example.com
-   ONVIF_PORT=porta esterna ONVIF
+   CAMERA_HOST=your-ddns-name.example.com
+   CAMERA_PORT=external RTSP port
+   ONVIF_HOST=your-ddns-name.example.com
+   ONVIF_PORT=external ONVIF port
    CAMERA_STREAM=stream1
    DATA_DIR=/data
    TZ=Europe/Rome
    YOUTUBE_TOKEN_JSON=...
    YOUTUBE_CLIENT_SECRET_JSON=...
    ```
-4. **Deploy web service**. La build dura circa un minuto e mezzo. Nei log devi vedere
-   `health endpoint on port 10000` e `ffmpeg start`. L'avviso `file_cache is only supported with
-   oauth2client<4.0.0` è innocuo.
-5. Dalla pagina del servizio prendi l'URL (`https://NOME.onrender.com`) e, con il pulsante
-   **Connect → Outbound**, gli intervalli IP da dare al router (nel mio caso `74.220.51.0/24` e
-   `74.220.59.0/24`: i tuoi dipendono dalla regione e possono essere diversi).
-6. Crea sul router le regole per le due porte della camera, una per intervallo (vedi sotto).
-7. Crea il monitor (UptimeRobot, cron-job.org) su `https://NOME.onrender.com/health` ogni 5 minuti.
+4. **Deploy web service**. The build takes about a minute and a half. In the logs you should see
+   `health endpoint on port 10000` and `ffmpeg start`. The warning `file_cache is only supported
+   with oauth2client<4.0.0` is harmless.
+5. From the service page take the URL (`https://NAME.onrender.com`) and, with the **Connect →
+   Outbound** button, the IP ranges to give to the router (in our case `74.220.51.0/24` and
+   `74.220.59.0/24`: yours depend on the region and may differ).
+6. Create router rules for the camera's two ports, one per range (see below).
+7. Create the monitor (UptimeRobot, cron-job.org) on `https://NAME.onrender.com/health` every
+   5 minutes.
 
-**Se già usi un VPS con questa camera:** la camera accetta una sola sessione RTSP per stream. Se
-VPS e Render registrano entrambi su `stream1`, il secondo che si collega riceve
-`Operation not permitted`. Fai girare un solo servizio per stream, oppure imposta
-`CAMERA_STREAM=stream2` su Render.
+**If you already run a VPS with this camera:** the camera accepts one RTSP session per stream. If
+the VPS and Render both record `stream1`, whichever connects second gets
+`Operation not permitted`. Run a single service per stream, or set `CAMERA_STREAM=stream2` on
+Render.
 
-Il Blueprint `render.free.yaml` non l'ho provato: aprendo il Blueprint con il `render.yaml` di
-default (worker da 7 $/mese) Render chiede una carta di pagamento. Il web service creato a mano,
-come sopra, non l'ha chiesta.
+The `render.free.yaml` Blueprint was not tried: opening a Blueprint with the default `render.yaml`
+(the $7/month worker) makes Render ask for a payment card. The web service created by hand, as
+above, did not.
 
-**Limiti e rischi, da leggere prima:**
+**Limits and risks, read them first:**
 
-| Limite | Conseguenza |
+| Limit | Consequence |
 |---|---|
-| Il disco si azzera a ogni riavvio, deploy o spin-down | I clip della giornata non ancora caricati si **perdono**. Render può riavviare il servizio in qualsiasi momento. |
-| Se il servizio dorme (monitor fermo, ore finite) | Nessuna registrazione finché non si risveglia (circa un minuto dopo la prima richiesta). |
-| Ore gratuite esaurite | Tutti i servizi gratuiti si sospendono fino al mese dopo. Con un solo servizio e il monitor non succede, con due sì. |
-| Render può sospendere i servizi gratuiti con traffico in uscita molto alto | Qui il traffico è di pochi MB al giorno, ma le regole possono cambiare. |
-| Il token YouTube rinnovato non viene salvato | Il token arriva da `YOUTUBE_TOKEN_JSON`; a ogni riavvio si riparte da quello. Funziona finché non viene revocato. |
-| RAM e CPU non documentate per il piano gratuito | Non misurate: ffmpeg in `-c copy` è leggero, ma non è verificato. |
-| Il monitor esterno è un'altra dipendenza | Se il servizio di monitoraggio cambia le sue regole, il servizio dorme. |
-| **IP di Render condivisi e non fissi** | Vedi sotto: è il rischio più serio. |
+| The disk is wiped on every restart, deploy or spin-down | Clips of the day not yet uploaded are **lost**. Render may restart the service at any time. |
+| If the service sleeps (monitor stopped, hours used up) | No recording until it wakes up (about a minute after the first request). |
+| Free hours used up | All free services are suspended until next month. Fine with one service and the monitor, not with two. |
+| Render may suspend free services with very high outbound traffic | Here it is a few MB a day, but rules can change. |
+| The refreshed YouTube token is not persisted | The token comes from `YOUTUBE_TOKEN_JSON`; every restart starts from it. It works until it is revoked. |
+| RAM and CPU of the free plan are not documented | Not measured: ffmpeg in `-c copy` is light, but not verified. |
+| The external monitor is one more dependency | If the monitoring service changes its rules, the service sleeps. |
+| **Render's IPs are shared and not fixed** | See below: it is the most serious risk. |
 
-**Il rischio più serio è la sicurezza della camera.** Gli IP in uscita di Render sono condivisi da
-tutti i servizi della regione e non sono nella documentazione: li trovi nel pannello del servizio,
-**Connect → Outbound**. Hai due strade, entrambe con un prezzo:
+**The most serious risk is the camera's security.** Render's outbound IPs are shared by every
+service in the region and are not in the documentation: you find them in the service's dashboard,
+**Connect → Outbound**. You have two options, both with a price:
 
-1. **Regole nel router per ogni intervallo** (consigliata). Una regola di port forwarding per
-   intervallo e per porta, con origine limitata a quell'intervallo. Anche così resti esposto a
-   chiunque usi lo stesso intervallo su Render, e gli intervalli possono cambiare: ricontrolla di
-   tanto in tanto. Non ho verificato che il tuo router accetti più regole sulla stessa porta
-   esterna con origini diverse; se non lo fa, usa porte esterne diverse per ogni regola.
-2. **Porte aperte a tutti.** Solo la password protegge la camera: usa una password **lunga e
-   unica** (mai quella di altri account), una porta esterna non standard, e tieni d'occhio i
-   tentativi di accesso. Sconsigliato.
+1. **Router rules for each range** (recommended). One port-forwarding rule per range and per port,
+   with the source limited to that range. Even so you stay exposed to anyone using the same range
+   on Render, and ranges can change: check from time to time. It was not verified that your router
+   accepts several rules on the same external port with different sources; if it doesn't, use a
+   different external port for each rule.
+2. **Ports open to everyone.** Only the password protects the camera: use a **long, unique
+   password** (never one used elsewhere), a non-standard external port, and watch for login
+   attempts. Not recommended.
 
-Se la connessione alla camera cade, lo script riprova da solo con attesa crescente: si perde solo
-quel tratto. Se invece cambia il tuo IP di casa, il nome DDNS (passo 5.1) segue l'aggiornamento.
+If the connection to the camera drops, the script retries by itself with growing delays: only that
+stretch is lost. If your home IP changes, the DDNS name (step 5.1) follows the update.
 
-Per avere gli stessi risultati del VPS senza questi limiti servono un disco persistente (a
-pagamento, vedi sopra) o un Raspberry in casa.
+To get the same results as the VPS without these limits you need a persistent disk (paid, see
+above) or a Raspberry Pi at home.
 
 ### Vercel
 
-Qui la risposta è no, ed è una questione di come funziona la piattaforma, non di configurazione.
+The answer here is no, and it is about how the platform works, not about configuration.
 
-- **Le Functions hanno un tempo massimo.** Con Fluid compute il limite è 300 s su Hobby e 800 s su
-  Pro, con 1800 s in beta ([limiti](https://vercel.com/docs/functions/limitations)). Una
-  funzione risponde a una richiesta e viene spenta: non può tenere ffmpeg collegato alla camera
-  tutto il giorno.
-- **Perché i progetti NestJS "non serverless" funzionavano.** Un'app NestJS su Vercel viene
-  eseguita comunque come funzione: serve richieste HTTP, che durano pochi secondi. Un servizio che
-  registra in continuo è un'altra cosa.
-- **Il disco è temporaneo.** Non c'è un posto dove tenere l'anello di video né i clip fino alle 21.
-- **Vercel Sandbox** è una microVM che può far girare processi in background, ma dura al massimo
-  45 minuti su Hobby o qualche ora su Pro, e i file spariscono quando si ferma. Si potrebbe
-  concatenare una sandbox dopo l'altra e salvare i clip su Vercel Blob, ma resterebbero lacune ad
-  ogni passaggio, i costi di un processo sempre acceso e **IP in uscita non fissi**, quindi il
-  port forwarding non si potrebbe restringere. Non lo consiglio.
-- **Vercel Workflows** mette in pausa e riprende elaborazioni lunghe, ma non è un posto dove far
-  girare un processo di registrazione.
+- **Functions have a maximum duration.** With Fluid compute the limit is 300 s on Hobby and 800 s on
+  Pro, with 1800 s in beta ([limits](https://vercel.com/docs/functions/limitations)). A function
+  answers a request and is shut down: it can't keep ffmpeg attached to the camera all day.
+- **Why "non-serverless" NestJS projects worked.** A NestJS app on Vercel still runs as a function:
+  it serves HTTP requests that last a few seconds. A service that records continuously is a
+  different thing.
+- **The disk is temporary.** There is nowhere to keep the video ring buffer or the clips until the
+  evening upload.
+- **Vercel Sandbox** is a microVM that can run background processes, but lasts at most 45 minutes
+  on Hobby or a few hours on Pro, and files vanish when it stops. You could chain one sandbox after
+  another and save clips to Vercel Blob, but you would get gaps at every handover, the cost of an
+  always-on process and **non-fixed outbound IPs**, so port forwarding couldn't be restricted. Not
+  recommended.
+- **Vercel Workflows** pauses and resumes long jobs, but it is not a place to run a recording
+  process.
 
-Vercel può invece servire per una pagina di stato o per un'API che legga lo stato dei video, con
-la registrazione che gira altrove.
+Vercel can still serve a status page or an API that reads the state of the videos, with the
+recording running elsewhere.
 
 ---
 
-## 4. Il server
+## 4. The server
 
-Esempio su Ubuntu/Debian (un VPS, un Raspberry Pi, un mini PC). Sostituisci `UTENTE` con il
-tuo utente Linux.
+Example for Ubuntu/Debian (a VPS, a Raspberry Pi, a mini PC). Replace `USER` with your Linux user.
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y ffmpeg python3-venv      # python3-venv serve davvero su Ubuntu
+sudo apt-get install -y ffmpeg python3-venv      # python3-venv is really needed on Ubuntu
 
 mkdir -p ~/tapo-uploader && cd ~/tapo-uploader
-# copia qui: tapo_uploader.py, requirements.txt, .env, client_secret.json, token.json
-chmod 600 .env client_secret.json token.json     # solo tu puoi leggerli
+# copy here: tapo_uploader.py, tapo_motion.py, requirements.txt, .env, client_secret.json, token.json
+chmod 600 .env client_secret.json token.json     # only you can read them
 
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 ```
 
-Il `.env` del server è quello del PC, con `CAMERA_HOST` e `CAMERA_PORT` che puntano alla
-camera **vista da internet** (passo 5), non all'IP di casa.
+The server's `.env` is the PC's one, with `CAMERA_HOST` and `CAMERA_PORT` pointing to the camera
+**as seen from the internet** (step 5), not to the home IP.
 
-### Servizio systemd
+### systemd service
 
-Così parte all'avvio e si riavvia da solo se si ferma (non serve un cron).
+So it starts at boot and restarts by itself if it stops (no cron needed).
 
 ```bash
 sudo cp deploy/tapo-uploader.service /etc/systemd/system/
-sudo nano /etc/systemd/system/tapo-uploader.service   # imposta UTENTE e i percorsi
+sudo nano /etc/systemd/system/tapo-uploader.service   # set USER and the paths
 sudo systemctl daemon-reload
 sudo systemctl enable tapo-uploader
 ```
 
-**Non avviarlo ancora**: prima il passo 5 e la verifica del passo 6.
+**Don't start it yet**: first step 5 and the check in step 6.
 
-Il file imposta `Environment=TZ=Europe/Rome`: senza, un server in UTC taglia i segmenti
-all'una di notte ora italiana e cambia playlist a mezzanotte UTC. Cambia il fuso se serve.
+The file sets `Environment=TZ=Europe/Rome`: without it, a server on UTC cuts segments at 1 AM
+Italian time and changes playlist at UTC midnight. Change the timezone as needed.
 
 ---
 
-## 5. Raggiungere la camera da internet
+## 5. Reaching the camera from the internet
 
-Se il server è nella stessa rete della camera, salta questo passo e usa l'IP locale.
-Altrimenti la camera, che sta dietro al router di casa, va resa raggiungibile **solo dal
-tuo server**.
+If the server is on the same network as the camera, skip this step and use the local IP. Otherwise
+the camera, which sits behind your home router, must be made reachable **only from your server**.
 
-> L'app Tapo funziona da fuori casa perché la camera si collega *in uscita* ai server
-> TP-Link. Questo non vale per RTSP: serve una porta aperta sul router.
+> The Tapo app works away from home because the camera connects *outbound* to TP-Link's servers.
+> That doesn't apply to RTSP: you need an open port on the router.
 
-### 5.1 Nome fisso per l'IP di casa (DDNS)
+### 5.1 A fixed name for your home IP (DDNS)
 
-L'IP pubblico di casa di solito cambia. Un servizio DDNS gratuito dà un nome fisso che segue
-l'IP. Con **FreeDNS** (<https://freedns.afraid.org>, gratuito, senza conferme mensili):
+Your home's public IP usually changes. A free DDNS service gives a fixed name that follows the IP.
+With **FreeDNS** (<https://freedns.afraid.org>, free, no monthly confirmations):
 
-1. Registrati, poi **Subdomains → Add**: tipo `A`, scegli un dominio libero e un nome
-   difficile da indovinare (es. `cam-` più caratteri casuali). Destinazione: il tuo IP attuale.
-2. In **Dynamic DNS** copia il token del tuo record: è la parte dopo il `?` del "Direct URL"
-   (la chiamano "hash").
-3. Nel router, sezione **DDNS**: provider `freedns`, nome dominio = il sottodominio
-   completo, hash = il token. Applica: lo stato deve dire che l'aggiornamento è andato bene.
+1. Sign up, then **Subdomains → Add**: type `A`, pick a free domain and a hard-to-guess name (for
+   example `cam-` plus random characters). Destination: your current IP.
+2. Under **Dynamic DNS** copy your record's token: it is the part after the `?` in the "Direct URL"
+   (they call it "hash").
+3. In the router's **DDNS** section: provider `freedns`, domain name = the full subdomain, hash =
+   the token. Apply: the status should say the update succeeded.
 
-Controlla che il nome risolva nel tuo IP: `nslookup il-tuo-nome.dominio.com`.
+Check that the name resolves to your IP: `nslookup your-name.domain.com`.
 
-> Se l'IP "WAN" mostrato dal router è diverso dall'IP pubblico che vedi su un sito tipo
-> `ifconfig.me`, sei dietro **CGNAT** e nessun port forwarding potrà funzionare: usa una VPN
-> (Tailscale, WireGuard) tra casa e server, oppure fai girare lo script in casa.
+> If the "WAN" IP shown by the router differs from the public IP you see on a site like
+> `ifconfig.me`, you are behind **CGNAT** and no port forwarding can work: use a VPN (Tailscale,
+> WireGuard) between home and server, or run the script at home.
 
-### 5.2 Port forwarding limitato al server
+### 5.2 Port forwarding limited to the server
 
-Nel router: **Port Forwarding → nuova regola**.
+In the router: **Port Forwarding → new rule**.
 
-| Campo | Valore |
+| Field | Value |
 |---|---|
-| Protocollo | TCP |
-| Porta WAN (esterna) | una porta alta a scelta, es. `38554`, non la 554 standard |
-| Host LAN | IP della camera |
-| Porta host LAN | `554` |
-| **IP host remoti** | **l'IP pubblico del tuo server** (stesso valore come inizio e fine intervallo) |
+| Protocol | TCP |
+| WAN (external) port | a high port of your choice, e.g. `38554`, not the standard 554 |
+| LAN host | the camera's IP |
+| LAN host port | `554` |
+| **Remote host IPs** | **your server's public IP** (the same value as range start and end) |
 
-Il campo "IP host remoti" è quello che conta: così la camera non è raggiungibile da nessun
-altro indirizzo di internet. Se il router non lo permette, valuta la VPN.
+The "Remote host IPs" field is what matters: it makes the camera unreachable from any other address
+on the internet. If your router doesn't allow it, consider a VPN.
 
-Poi nel `.env` del server:
+Then in the server's `.env`:
 
 ```
-CAMERA_HOST=il-tuo-nome.dominio.com
+CAMERA_HOST=your-name.domain.com
 CAMERA_PORT=38554
 ```
 
-### 5.3 Prova dal server
+### 5.3 Test from the server
 
 ```bash
-bash -c '</dev/tcp/il-tuo-nome.dominio.com/38554' && echo PORTA_APERTA
+bash -c '</dev/tcp/your-name.domain.com/38554' && echo PORT_OPEN
 .venv/bin/python tapo_uploader.py check
 ```
 
-Dall'esterno (per esempio col telefono in 5G) la stessa porta deve risultare **chiusa**.
+From outside (for example your phone on 5G) the same port must show as **closed**.
 
 ---
 
-## 6. Verifica finale
+## 6. Final check
 
 ```bash
 cd ~/tapo-uploader
-.venv/bin/python tapo_uploader.py test      # registra 60 s e carica, dal server
+.venv/bin/python tapo_uploader.py test      # records 60 s and uploads, from the server
 sudo systemctl start tapo-uploader
-systemctl status tapo-uploader              # deve essere "active (running)"
-journalctl -u tapo-uploader -f              # log in tempo reale
-ls -la recordings                           # il segmento in corso
+systemctl status tapo-uploader              # must be "active (running)"
+journalctl -u tapo-uploader -f              # live logs
+ls -la recordings                           # the segment being recorded
 ```
 
-Ricorda il limite di una sessione per stream: lancia `check` e `test` **prima** di avviare il
-servizio, oppure con `CAMERA_STREAM=stream2`.
+Remember the one-session-per-stream limit: run `check` and `test` **before** starting the service,
+or with `CAMERA_STREAM=stream2`.
 
-Il primo upload automatico avviene dopo la chiusura del primo segmento (alla prossima ora
-00, 06, 12 o 18) e il file sparisce da `recordings/`. Su YouTube trovi il video privato e la
-playlist del giorno. **Le playlist private non compaiono nella pagina pubblica del tuo
-canale**: cercale in **YouTube → Tu → Playlist** oppure in
-Studio → Contenuti → Playlist.
+The first automatic upload happens after the first segment closes (at the next 00, 06, 12 or 18
+o'clock) and the file disappears from `recordings/`. On YouTube you find the private video and the
+day's playlist. **Private playlists don't show on your channel's public page**: look in
+**YouTube → You → Playlists** or in Studio → Content → Playlists.
 
 ---
 
-## Modalità a movimento: un video al giorno
+## Motion mode: one video per day
 
-Alternativa alla registrazione continua (`tapo_uploader.py`): `tapo_motion.py` registra **solo
-quando la camera rileva un movimento** e carica **un unico video al giorno**, per esempio alle 21.
-Con la registrazione continua si caricano 4 video al giorno e si tiene tutto; qui si tiene solo
-ciò che è successo.
+An alternative to continuous recording (`tapo_uploader.py`): `tapo_motion.py` records **only when
+the camera detects motion** and uploads **a single video a day**, for example at 21:00. Continuous
+recording uploads 4 videos a day and keeps everything; here you keep only what happened.
 
 ```
- ffmpeg ──▶ anello di segmenti da 10 s (solo l'ultimo minuto) ──┐
- camera ──ONVIF (eventi)──▶ movimento? ──▶ clip: 30 s prima + 5 min dopo ──▶ events/AAAAMMGG/
-                                                                        │
-                       alle 21:00: tutti i clip del giorno ──▶ un video privato ──▶ file cancellati
+ ffmpeg ──▶ ring of 10 s segments (only the last minute) ──┐
+ camera ──ONVIF events──▶ motion? ──▶ clip: 30 s before + 5 min after ──▶ events/YYYYMMDD/
+                                                                      │
+                  at 21:00: all the day's clips ──▶ one private video ──▶ files deleted
 ```
 
-**Regole:**
-- Il primo movimento apre un evento: il clip va da `MOTION_PRE_SECONDS` (30 s) **prima** a
-  `MOTION_POST_SECONDS` (5 min) **dopo**.
-- Un movimento che arriva negli **ultimi `MOTION_EXTEND_WITHIN` secondi (30)** della finestra la
-  prolunga di altri 5 minuti da quel momento (per esempio un movimento al 4:50). Lo stesso se il
-  movimento è ancora in corso. I movimenti nelle fasi precedenti della finestra vengono ignorati.
-- Alle `UPLOAD_AT` (21:00) i clip del giorno vengono uniti **senza ricodificare** in un solo video
-  privato. Il titolo è `Tapo 2026-10-26 eventi 07:12-20:55 (5)` e la **descrizione elenca l'ora di
-  ogni evento** (`0:00 Movimento alle 07:12:03`...): YouTube la mostra come capitoli. Poi i file
-  vengono cancellati. Se un giorno non c'è stato nessun evento non si carica nulla. Un evento
-  chiuso dopo le 21:00 finisce nel video successivo.
-- Senza movimenti il disco non si riempie: l'anello tiene circa un minuto di video.
+**Rules:**
+- The first motion opens an event: the clip goes from `MOTION_PRE_SECONDS` (30 s) **before** to
+  `MOTION_POST_SECONDS` (5 min) **after**.
+- Motion arriving in the **last `MOTION_EXTEND_WITHIN` seconds (30)** of the window extends it by
+  another 5 minutes from that moment (for example motion at 4:50). The same if the motion is still
+  going on. Motion during the earlier part of the window is ignored.
+- At `UPLOAD_AT` (21:00) the day's clips are joined **without re-encoding** into one private video.
+  The title is `Tapo 2026-10-26 events 07:12-20:55 (5)` and the **description lists the time of
+  every event** (`0:00 Motion at 07:12:03`...): YouTube shows it as chapters. Then the files are
+  deleted. If a day had no events nothing is uploaded. An event that ends after 21:00 goes into the
+  next video.
+- With no motion the disk doesn't fill up: the ring keeps about a minute of video.
 
-**Cosa serve in più:**
+**What you also need:**
 
-1. **Rilevamento attivo nell'app Tapo** (Impostazioni → Rilevamento e allarmi). Gli eventi
-   dipendono da cosa è acceso: `IsMotion` = rilevamento del movimento, `IsPeople` = rilevamento
-   persone. Si scelgono con `MOTION_EVENTS` (default: tutti e due).
-2. **ONVIF raggiungibile dal server.** Gli eventi passano dalla porta 2020 della camera. In LAN non
-   serve nulla; da remoto serve **una seconda regola di port forwarding** come quella del passo 5.2:
-   porta esterna `38020` (a scelta) verso `IP_CAMERA:2020`, TCP, **solo dall'IP del server**. Nel
-   `.env` del server:
+1. **Detection turned on in the Tapo app** (Settings → Detection & Alarms). Events depend on what
+   is on: `IsMotion` = motion detection, `IsPeople` = person detection. Choose with
+   `MOTION_EVENTS` (default: both).
+2. **ONVIF reachable from the server.** Events go through the camera's port 2020. On the LAN nothing
+   is needed; remotely you need **a second port-forwarding rule** like the one in step 5.2: external
+   port `38020` (your choice) to `CAMERA_IP:2020`, TCP, **only from the server's IP**. In the
+   server's `.env`:
 
    ```
-   ONVIF_HOST=il-tuo-nome.dominio.com
+   ONVIF_HOST=your-name.domain.com
    ONVIF_PORT=38020
    ```
 
-   Su alcuni router (ZTE H388X) la regola creata diventa attiva solo dopo aver premuto **Applica una
-   seconda volta**: verifica dal server con `bash -c '</dev/tcp/il-tuo-nome.dominio.com/38020'`.
-3. **Servizio al posto di quello continuo.** La camera accetta una sola sessione RTSP per stream:
-   fermane uno prima di avviare l'altro.
+   On some routers (ZTE H388X) the created rule only becomes active after pressing **Apply a second
+   time**: check from the server with `bash -c '</dev/tcp/your-name.domain.com/38020'`.
+3. **The service in place of the continuous one.** The camera accepts one RTSP session per stream:
+   stop one before starting the other.
 
    ```bash
    sudo systemctl disable --now tapo-uploader
-   sudo cp deploy/tapo-motion.service /etc/systemd/system/    # imposta UTENTE e i percorsi
+   sudo cp deploy/tapo-motion.service /etc/systemd/system/    # set USER and the paths
    sudo systemctl daemon-reload && sudo systemctl enable --now tapo-motion
    journalctl -u tapo-motion -f
    ```
 
-**Comandi:**
+**Commands:**
 
 ```bash
-python tapo_motion.py listen 60    # stampa gli eventi di movimento che la camera invia (prova ONVIF)
-python tapo_motion.py run          # registra attorno ai movimenti, carica una volta al giorno
-python tapo_motion.py upload       # unisce e carica subito i clip in attesa
+python tapo_motion.py listen 60    # prints the motion events the camera sends (ONVIF test)
+python tapo_motion.py run          # records around motion, uploads once a day
+python tapo_motion.py upload       # joins and uploads the pending clips right now
 ```
 
-**Prova rapida con tempi ridotti**, da un PC in LAN (usa `stream2` se il servizio occupa `stream1`):
+**Quick test with short times**, from a PC on the LAN (use `stream2` if the service holds
+`stream1`):
 
 ```bash
 CAMERA_STREAM=stream2 MOTION_POST_SECONDS=20 MOTION_EXTEND_WITHIN=10 UPLOAD_AT=00:00 \
   python tapo_motion.py run
 ```
 
-Cammina davanti alla camera: nel log compaiono `motion: recording...`, poi `clip saved` e,
-entro un minuto, l'upload del video del giorno (`UPLOAD_AT=00:00` lo rende subito dovuto).
+Walk in front of the camera: the log shows `motion: recording...`, then `clip saved` and, within a
+minute, the upload of the day's video (`UPLOAD_AT=00:00` makes it due immediately).
 
-**Cose da sapere:**
-- I 30 secondi di anticipo hanno una tolleranza di circa 10 secondi (segmenti da 10 s, tagli sui
-  keyframe).
-- Se il servizio si riavvia durante un evento, quel clip va perso.
-- Con la camera ferma `listen` non stampa nulla: la camera segnala solo i cambi di stato.
+**Good to know:**
+- The 30 seconds of pre-roll have a tolerance of about 10 seconds (10 s segments, cuts on
+  keyframes).
+- If the service restarts during an event, that clip is lost.
+- With a still camera `listen` prints nothing: the camera only reports state changes.
 
 ---
 
-## Uso quotidiano
+## Daily use
 
 ```bash
-sudo systemctl status tapo-uploader       # stato
-journalctl -u tapo-uploader -f            # log
-sudo systemctl restart tapo-uploader      # dopo aver cambiato .env o lo script
-sudo systemctl stop tapo-uploader         # fermarlo
-ls -la ~/tapo-uploader/recordings         # segmenti in attesa o in registrazione
+sudo systemctl status tapo-uploader       # status
+journalctl -u tapo-uploader -f            # logs
+sudo systemctl restart tapo-uploader      # after changing .env or the script
+sudo systemctl stop tapo-uploader         # stop it
+ls -la ~/tapo-uploader/recordings         # segments waiting or being recorded
 ```
 
-- Un riavvio chiude il segmento corrente e ne apre uno nuovo, quindi viene caricato anche un
-  video più breve.
-- I segmenti sono MP4 "frammentati": restano riproducibili anche se ffmpeg viene
-  interrotto di colpo (riavvio, spegnimento). Al massimo si perdono gli ultimi secondi.
+(Use `tapo-motion` instead of `tapo-uploader` in motion mode.)
+
+- A restart closes the current segment and opens a new one, so a shorter video is uploaded too.
+- Segments are "fragmented" MP4s: they stay playable even if ffmpeg is killed abruptly (reboot,
+  power off). At most the last few seconds are lost.
 
 ---
 
-## Configurazione
+## Configuration
 
-File `.env` (da `.env.example`, **mai** nel repository):
+`.env` file (from `.env.example`, **never** in the repository):
 
-| Variabile | Significato |
+| Variable | Meaning |
 |---|---|
-| `CAMERA_USER`, `CAMERA_PASS` | Account camera creato nell'app Tapo (non l'account cloud). |
-| `CAMERA_HOST`, `CAMERA_PORT` | In LAN l'IP della camera e `554`. Da remoto nome DDNS e porta esterna. |
-| `CAMERA_STREAM` | `stream1` (alta qualità) o `stream2` (bassa). |
-| `SEGMENT_SECONDS` | Durata di ogni file, default `21600` (6 ore). |
-| `RECORD_DIR` | Cartella dei file in attesa di upload, default `recordings`. |
-| `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_TOKEN` | Nomi dei file `client_secret.json` e `token.json`. |
-| `YOUTUBE_PRIVACY` | `private` (default), `unlisted` o `public`. |
-| `PLAYLIST_PREFIX` | Prefisso di titoli e playlist (default `Tapo`). |
-| `DATA_DIR` | Cartella di token, stato e video in attesa (default: la cartella del progetto). In un container è il disco persistente, es. `/data`. |
-| `YOUTUBE_TOKEN_JSON`, `YOUTUBE_CLIENT_SECRET_JSON` | Contenuto di `token.json` e `client_secret.json`, per i container: se i file mancano vengono creati da qui. |
+| `CAMERA_USER`, `CAMERA_PASS` | Camera account created in the Tapo app (not the cloud account). |
+| `CAMERA_HOST`, `CAMERA_PORT` | On the LAN the camera's IP and `554`. Remotely the DDNS name and external port. |
+| `CAMERA_STREAM` | `stream1` (high quality) or `stream2` (low). |
+| `SEGMENT_SECONDS` | Length of each file, default `21600` (6 hours). |
+| `RECORD_DIR` | Folder of files waiting for upload, default `recordings`. |
+| `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_TOKEN` | Names of the `client_secret.json` and `token.json` files. |
+| `YOUTUBE_PRIVACY` | `private` (default), `unlisted` or `public`. |
+| `PLAYLIST_PREFIX` | Prefix of titles and playlists (default `Tapo`). |
+| `DATA_DIR` | Folder for token, state and pending videos (default: the project folder). In a container it is the persistent disk, e.g. `/data`. |
+| `YOUTUBE_TOKEN_JSON`, `YOUTUBE_CLIENT_SECRET_JSON` | Contents of `token.json` and `client_secret.json`, for containers: if the files are missing they are created from these. |
 
-Solo per `tapo_motion.py` (valori di default tra parentesi):
+Only for `tapo_motion.py` (defaults in brackets):
 
-| Variabile | Significato |
+| Variable | Meaning |
 |---|---|
-| `MOTION_PRE_SECONDS` (30) | Secondi registrati prima del primo movimento. |
-| `MOTION_POST_SECONDS` (300) | Secondi registrati dopo il movimento. |
-| `MOTION_EXTEND_WITHIN` (30) | Un movimento negli ultimi N secondi della finestra la prolunga. |
-| `MOTION_EVENTS` (`IsMotion,IsPeople`) | Eventi ONVIF che contano come movimento. |
-| `UPLOAD_AT` (`21:00`) | Ora dopo la quale si carica il video del giorno. |
-| `BUFFER_SEGMENT_SECONDS` (10) | Durata dei segmenti dell'anello. |
-| `BUFFER_DIR`, `EVENTS_DIR` | Cartelle dell'anello e dei clip (`buffer`, `events`). |
-| `ONVIF_HOST`, `ONVIF_PORT` (host della camera, `2020`) | Dove raggiungere gli eventi ONVIF. |
+| `MOTION_PRE_SECONDS` (30) | Seconds recorded before the first motion. |
+| `MOTION_POST_SECONDS` (300) | Seconds recorded after the motion. |
+| `MOTION_EXTEND_WITHIN` (30) | Motion in the last N seconds of the window extends it. |
+| `MOTION_EVENTS` (`IsMotion,IsPeople`) | ONVIF events that count as motion. |
+| `UPLOAD_AT` (`21:00`) | Time after which the day's video is uploaded. |
+| `BUFFER_SEGMENT_SECONDS` (10) | Length of the ring's segments. |
+| `BUFFER_DIR`, `EVENTS_DIR` | Folders of the ring and of the clips (`buffer`, `events`). |
+| `ONVIF_HOST`, `ONVIF_PORT` (camera host, `2020`) | Where to reach the ONVIF events. |
 
 ---
 
-## Come funziona
+## Under the hood
 
-- **Segmenti allineati all'orologio.** `-segment_atclocktime 1` taglia a 00/06/12/18; il taglio
-  avviene al primo keyframe successivo, quindi le durate variano di qualche secondo.
-- **Timestamp.** La camera manda pacchetti H.264 senza timestamp validi: ffmpeg usa
+- **Wall-clock-aligned segments.** `-segment_atclocktime 1` cuts at 00/06/12/18; the cut happens at
+  the next keyframe, so durations vary by a few seconds.
+- **Timestamps.** The camera sends H.264 packets without valid timestamps: ffmpeg uses
   `-use_wallclock_as_timestamps 1 -fflags +genpts`.
-- **Audio.** L'audio della camera è PCM A-law, che l'MP4 non accetta: viene convertito in AAC
-  (64 kbit/s, mono). Il video non viene toccato.
-- **MP4 frammentato.** `movflags=+frag_keyframe+empty_moov+default_base_moof`. Un MP4 normale
-  scrive l'indice (`moov`) solo alla fine: se ffmpeg viene ucciso il file resta illeggibile.
-  Con la frammentazione ogni pezzo è già completo.
-- **Titolo.** L'inizio viene dal nome del file, la fine dall'ultima scrittura: corretto anche
-  per i segmenti parziali.
-- **Upload.** Ripartibile a blocchi da 8 MB. Si carica solo ciò che è fermo da più di 2 minuti.
-  Se la quota YouTube è finita, aspetta un'ora.
-- **Playlist.** Si cerca per titolo tra le tue; se manca viene creata. L'ID è in `state.json`.
-- **Log puliti.** Le credenziali della camera vengono sempre mascherate (`rtsp://***@...`),
-  perché ffmpeg stampa l'URL completo negli errori. ffmpeg logga solo gli errori.
+- **Audio.** The camera's audio is PCM A-law, which MP4 doesn't accept: it is converted to AAC
+  (64 kbit/s, mono). The video is untouched.
+- **Fragmented MP4.** `movflags=+frag_keyframe+empty_moov+default_base_moof`. A normal MP4 writes
+  its index (`moov`) only at the end: if ffmpeg is killed the file is unreadable. With
+  fragmentation each piece is already complete.
+- **Title.** The start comes from the file name, the end from the last write: right even for
+  partial segments.
+- **Upload.** Resumable in 8 MB chunks. Only what has been still for more than 2 minutes is
+  uploaded. If the YouTube quota is used up, it waits an hour.
+- **Playlist.** It is searched by title among yours; if missing it is created. The ID is kept in
+  `state.json`.
+- **ONVIF events.** A PullPoint subscription on the camera's port 2020 with WS-Security
+  (UsernameToken digest), polling in 1-second requests over a plain socket, renewed every 90 s.
+  Only state changes are forwarded.
+- **Motion engine.** A ring of 10-second segments keeps the pre-roll; on an event the needed
+  segments are joined with ffmpeg `concat` (copy) into one clip; the day's clips are joined the
+  same way into the video that is uploaded.
+- **Clean logs.** The camera credentials are always masked (`rtsp://***@...`), because ffmpeg
+  prints the full URL in errors. ffmpeg only logs errors.
 
 ---
 
-## Quota YouTube
+## YouTube quota
 
-Ogni upload costa circa 1.650 unità (1.600 il video, 50 l'inserimento in playlist) e la
-quota giornaliera di default è **10.000**: circa **6 video al giorno**.
+Each upload costs about 1,650 units (1,600 the video, 50 the playlist insert) and the default daily
+quota is **10,000**: about **6 videos a day**.
 
-| Durata segmento | Upload al giorno | Rientra nella quota? |
+| Segment length | Uploads per day | Within quota? |
 |---|---|---|
-| 6 ore (default) | 4 | sì |
-| 4 ore | 6 | al limite |
-| 1 ora | 24 | no, serve richiedere un aumento a Google |
+| 6 hours (default) | 4 | yes |
+| 4 hours | 6 | at the limit |
+| 1 hour | 24 | no, you must ask Google for an increase |
+| Motion mode | 1 | yes |
 
-Se la quota finisce lo script lo scrive nel log e riprova dopo un'ora. La quota si azzera a
-mezzanotte, ora del Pacifico.
-
----
-
-## Sicurezza
-
-- Non pubblicare mai `.env`, `client_secret.json`, `token.json`. Il `.gitignore` li esclude.
-- `token.json` dà accesso al tuo canale YouTube: permessi `600`. Se si perde, revoca
-  l'accesso da <https://myaccount.google.com/permissions>.
-- Limita il port forwarding all'IP del server e usa una porta esterna non standard.
-- Usa password **diverse** per camera, account Tapo e server. Non riutilizzarle e non
-  scriverle in chat o nei ticket.
-- Se l'IP del server cambia, aggiorna la regola del router.
+If the quota runs out the script writes it in the log and retries after an hour. The quota resets
+at midnight Pacific Time.
 
 ---
 
-## Problemi comuni
+## Security
 
-| Sintomo | Causa e rimedio |
+- Never publish `.env`, `client_secret.json`, `token.json`. `.gitignore` excludes them.
+- `token.json` gives access to your YouTube channel: mode `600`. If lost, revoke access at
+  <https://myaccount.google.com/permissions>.
+- Limit port forwarding to the server's IP and use a non-standard external port.
+- Use **different** passwords for the camera, the Tapo account and the server. Don't reuse them and
+  don't paste them in chats or tickets.
+- If the server's IP changes, update the router rule.
+
+---
+
+## Troubleshooting
+
+| Symptom | Cause and fix |
 |---|---|
-| `401 Unauthorized` | Utente o password dell'**account camera** sbagliati (non quelli del cloud Tapo). |
-| `Operation not permitted` | Un'altra sessione sta già usando quello stream: ferma il servizio o usa `stream2`. |
-| Timeout dal server | Port forwarding assente, IP del server cambiato, IP di casa cambiato e DDNS non aggiornato, oppure CGNAT. |
-| `ensurepip is not available` creando il venv | Manca `python3-venv`: `sudo apt-get install python3-venv`. |
-| `invalid_grant` su YouTube | Token scaduto o revocato (tipico se l'app era in Test): `auth` di nuovo e ricopia `token.json`. |
-| Il pulsante "Pubblica app" è grigio | Mancano home page, privacy policy o dominio autorizzato in Branding. |
-| `moov atom not found` su un file | Segmento scritto con una versione senza MP4 frammentato e interrotto: irrecuperabile, eliminalo. |
-| Playlist col giorno sbagliato o tagli all'una | Il processo gira in UTC: manca `TZ` nel servizio. |
-| Non vedo la playlist nel mio canale | È privata: cercala in YouTube → Tu → Playlist, non nella pagina pubblica del canale. |
-| Nessun upload dopo ore | Il segmento non è ancora chiuso: guarda `recordings/` e `journalctl -u tapo-uploader`. |
-| `listen` non stampa mai niente | Rilevamento spento nell'app Tapo, oppure nessun movimento: gli eventi arrivano solo ai cambi di stato. |
-| Eventi ONVIF: timeout o nessuna risposta | La porta ONVIF non è raggiungibile (regola da riapplicare, IP del server cambiato). Prova `bash -c '</dev/tcp/HOST/PORTA'`. |
-| La camera risponde solo alla prima richiesta ONVIF | Succede con `PullMessages` lunghi o con client HTTP standard: lo script usa richieste da 1 s su un socket semplice. |
-| Eventi sempre ignorati | `MOTION_EVENTS` non contiene l'evento che la camera manda (`IsPeople` invece di `IsMotion`, o viceversa). |
-| `quotaExceeded` | Troppi upload per la quota giornaliera: aumenta la durata dei segmenti. |
+| `401 Unauthorized` | Wrong username or password of the **camera account** (not the Tapo cloud ones). |
+| `Operation not permitted` | Another session is already using that stream: stop the service or use `stream2`. |
+| Timeout from the server | Missing port forwarding, server IP changed, home IP changed and DDNS not updated, or CGNAT. |
+| `ensurepip is not available` creating the venv | `python3-venv` is missing: `sudo apt-get install python3-venv`. |
+| `invalid_grant` on YouTube | Token expired or revoked (typical if the app was in Testing): run `auth` again and copy `token.json`. |
+| The "Publish app" button is grey | Home page, privacy policy or authorized domain missing in Branding. |
+| `moov atom not found` on a file | Segment written by a version without fragmented MP4 and interrupted: unrecoverable, delete it. |
+| Playlist with the wrong day or cuts at 1 AM | The process runs on UTC: `TZ` is missing in the service. |
+| I can't see the playlist in my channel | It is private: look in YouTube → You → Playlists, not on the channel's public page. |
+| No upload after hours | The segment is not closed yet: look at `recordings/` and `journalctl -u tapo-uploader`. |
+| `listen` never prints anything | Detection is off in the Tapo app, or there is no motion: events arrive only on state changes. |
+| ONVIF events: timeout or no answer | The ONVIF port is unreachable (rule to re-apply, server IP changed). Try `bash -c '</dev/tcp/HOST/PORT'`. |
+| The camera answers only the first ONVIF request | Happens with long `PullMessages` or standard HTTP clients: the script uses 1 s requests over a plain socket. |
+| Events always ignored | `MOTION_EVENTS` doesn't contain the event the camera sends (`IsPeople` instead of `IsMotion`, or vice versa). |
+| `quotaExceeded` | Too many uploads for the daily quota: lengthen the segments. |
 
 ---
 
-## Licenza
+## FAQ
 
-MIT, vedi [LICENSE](LICENSE).
+**Can a Tapo C200 upload to YouTube?**
+Not by itself. The camera has no YouTube or Google Drive option. This project adds it from outside:
+a small service reads the camera's RTSP stream and uploads with the official YouTube API.
+
+**Do I need to flash custom firmware or root the camera?**
+No. The stock firmware already exposes RTSP and ONVIF once you create the *Camera Account* in the
+Tapo app. Nothing on the camera is modified.
+
+**Is this a free alternative to Tapo Care or a cloud subscription?**
+It replaces the cloud storage part: footage goes to your own YouTube channel, which is free. You
+lose the app's cloud timeline, so keep Tapo Care if you rely on it. Running the service costs
+nothing on a Raspberry Pi you already own, and a few dollars a month on a VPS.
+
+**Will the videos be public?**
+No. They are uploaded as `private` and only your Google account can see them. You can change it to
+`unlisted` or `public` with `YOUTUBE_PRIVACY`.
+
+**Does it record all day or only on motion?**
+Your choice. `tapo_motion.py` records only around motion detection (30 s before, 5 min after) and
+uploads one video a day. `tapo_uploader.py` records continuously in segments.
+
+**How do I record a Tapo camera on motion only?**
+Use `tapo_motion.py`: it subscribes to the camera's ONVIF motion and person-detection events and
+keeps a short ring buffer so the seconds *before* the trigger are included. See
+[Motion mode](#motion-mode-one-video-per-day).
+
+**Does it work with other TP-Link Tapo cameras or other brands?**
+Only the Tapo C200 has been tested. Any camera that offers RTSP and ONVIF event notifications has a
+good chance, with different stream paths or event names. Issues and pull requests with other models
+are welcome.
+
+**Will I hit the YouTube API quota?**
+No. One upload costs about 1,650 of the 10,000 free daily units. Motion mode uses one upload a
+day; continuous mode with 6-hour segments uses four.
+
+**Do I need to expose my camera to the internet?**
+Only if the server is not on your home network. At home (Raspberry Pi, mini PC) nothing is
+exposed. With a remote VPS you forward one or two ports restricted to the server's IP; see
+[step 5](#5-reaching-the-camera-from-the-internet) and [Security](#security).
+
+**Can it run on Docker, Render or a Raspberry Pi?**
+Yes to all three. There's a `Dockerfile`, Render blueprints and a systemd unit. See
+[Where to run it](#where-to-run-it) for the honest trade-offs of each.
+
+**Why not Home Assistant, Frigate or Scrypted?**
+They are great and much bigger. This is a single small script for one job: get motion footage into
+YouTube without running a home-automation stack.
+
+---
+
+## Contributing
+
+Issues and pull requests are welcome, especially: other camera models, router guides for port
+forwarding, a notification on failures, and a tested Render or Fly.io setup. If this saved you a
+subscription, a ⭐ helps other people find it.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
