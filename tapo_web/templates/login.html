@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Sign in · tapo-uploader{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-6 col-lg-5">
+    <div class="card app-card login-card">
+      <h1 class="h3">Sign in</h1>
+      {% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
+      {% if settings.local_login %}
+      <form method="post" action="{{ url_for('login_post') }}" autocomplete="on">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="next" value="{{ next or '' }}">
+        <div class="form-group">
+          <label for="username">Username</label>
+          <input class="form-control" id="username" name="username" type="text" autocomplete="username" required autofocus>
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input class="form-control" id="password" name="password" type="password" autocomplete="current-password" required>
+        </div>
+        <button class="btn btn-primary btn-round btn-block" type="submit">Sign in</button>
+      </form>
+      {% endif %}
+      {% if settings.nextcloud_enabled %}
+      <a class="btn btn-neutral btn-round btn-block" href="/auth/nextcloud/start{% if next %}?next={{ next | urlencode }}{% endif %}">Sign in with Nextcloud</a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
