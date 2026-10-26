@@ -63,7 +63,8 @@ def create_app(settings: Settings, db: Database = None):
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "same-origin")
-        response.headers.setdefault("Content-Security-Policy", "default-src 'self'; img-src 'self' https://i.ytimg.com data:")
+        response.headers.setdefault("Content-Security-Policy", "default-src 'self'; img-src 'self' https://i.ytimg.com data:; "
+                                    "frame-src https://www.youtube-nocookie.com; media-src 'self'")
         return response
 
     def login_required(view):
@@ -142,6 +143,10 @@ def create_app(settings: Settings, db: Database = None):
     register_nextcloud(app)
     from .youtube_link import register as register_youtube
     register_youtube(app)
+    from .storage_page import register as register_storage
+    register_storage(app)
+    from .media import register as register_media
+    register_media(app)
     from .cameras import register as register_cameras
     register_cameras(app)
     from .dashboard import register as register_dashboard

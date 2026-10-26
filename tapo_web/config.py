@@ -11,6 +11,10 @@ class SettingsError(ValueError):
     pass
 
 
+STORAGE_KINDS = ("youtube", "webdav", "local", "rclone")
+USER_STORAGE_KINDS = ("youtube", "webdav")  # local and rclone are server-level only: a user could aim them at the server
+
+
 def _flag(environ, name, default=False):
     value = environ.get(name)
     if value is None or value == "":
@@ -50,6 +54,17 @@ class Settings:
     allow_private_hosts: bool = False
     local_login: bool = True
     trusted_proxy_hops: int = 0
+    storage: str = "youtube"
+    storage_allowed: tuple = USER_STORAGE_KINDS
+    allow_own_storage: bool = False
+    storage_webdav_url: str = ""
+    storage_webdav_user: str = ""
+    storage_webdav_password: str = ""
+    storage_webdav_folder: str = ""
+    storage_local_root: str = ""
+    rclone_remote: str = ""
+    rclone_config: str = ""
+    rclone_folder: str = ""
 
     @property
     def nextcloud_enabled(self):
@@ -79,6 +94,16 @@ class Settings:
         except ValueError as err:
             raise SettingsError("UPLOAD_AT must look like 21:00") from err
         client_json = environ.get("YOUTUBE_CLIENT_SECRET_JSON") or None
+        storage = (environ.get("STORAGE") or "youtube").strip().lower()
+        if storage not in STORAGE_KINDS:
+            raise SettingsError(f"STORAGE must be one of {', '.join(STORAGE_KINDS)}")
+        allowed = tuple(kind.strip().lower() for kind in (environ.get("STORAGE_ALLOWED") or "youtube,webdav").split(",")
+                        if kind.strip())
+        if not allowed or any(kind not in USER_STORAGE_KINDS for kind in allowed):
+            raise SettingsError("STORAGE_ALLOWED may only list youtube and webdav (local and rclone are server-level)")
+        needs = {"webdav": "STORAGE_WEBDAV_URL", "local": "STORAGE_LOCAL_ROOT", "rclone": "STORAGE_RCLONE_REMOTE"}
+        if storage in needs and not environ.get(needs[storage]):
+            raise SettingsError(f"STORAGE={storage} needs {needs[storage]}")
         return cls(
             multiuser=multiuser,
             public_url=(environ.get("PUBLIC_URL") or "").rstrip("/"),
@@ -103,4 +128,15 @@ class Settings:
             allow_private_hosts=_flag(environ, "ALLOW_PRIVATE_HOSTS"),
             local_login=_flag(environ, "LOCAL_LOGIN", True),
             trusted_proxy_hops=_int(environ, "TRUSTED_PROXY_HOPS", 0),
+            storage=storage,
+            storage_allowed=allowed,
+            allow_own_storage=_flag(environ, "ALLOW_OWN_STORAGE"),
+            storage_webdav_url=environ.get("STORAGE_WEBDAV_URL", ""),
+            storage_webdav_user=environ.get("STORAGE_WEBDAV_USER", ""),
+            storage_webdav_password=environ.get("STORAGE_WEBDAV_PASSWORD", ""),
+            storage_webdav_folder=environ.get("STORAGE_WEBDAV_FOLDER", ""),
+            storage_local_root=environ.get("STORAGE_LOCAL_ROOT", ""),
+            rclone_remote=environ.get("STORAGE_RCLONE_REMOTE", ""),
+            rclone_config=environ.get("STORAGE_RCLONE_CONFIG", ""),
+            rclone_folder=environ.get("STORAGE_RCLONE_FOLDER", ""),
         )

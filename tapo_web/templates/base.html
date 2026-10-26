@@ -17,6 +17,7 @@
       <a class="navbar-brand" href="{{ url_for('home') }}">tapo-uploader</a>
       <ul class="navbar-nav ml-auto align-items-center">
         {% if current_user() %}
+          <li class="nav-item"><a class="nav-link" href="/storage">Recordings</a></li>
           {% if current_user().role == 'admin' %}<li class="nav-item"><a class="nav-link" href="/admin">Admin</a></li>{% endif %}
           <li class="nav-item"><span class="nav-link user-name">{{ current_user().display_name }}</span></li>
           <li class="nav-item">

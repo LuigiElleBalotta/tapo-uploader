@@ -54,6 +54,7 @@
           <li class="nav-item"><a class="nav-link" href="#how">How it works</a></li>
           <li class="nav-item"><a class="nav-link" href="#features">Features</a></li>
           <li class="nav-item"><a class="nav-link" href="#friends">Multi-account</a></li>
+          <li class="nav-item"><a class="nav-link" href="#storage">Storage</a></li>
           <li class="nav-item"><a class="nav-link" href="#run">Where to run</a></li>
           <li class="nav-item"><a class="nav-link" href="#start">Quick start</a></li>
           <li class="nav-item"><a class="nav-link" href="#faq">FAQ</a></li>
@@ -130,7 +131,7 @@
         <p class="section-lead">Turn on multi-account mode and several trusted people share the same server. Everyone links their own camera and their own YouTube channel, and sees only their own videos. Leave it off and nothing changes.</p>
         <div class="row">
           <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">groups</span><h3>Everyone gets a page</h3><p>Camera status, last motion, last upload and the daily playlists of their own YouTube channel, in one place.</p></div></div>
-          <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">smart_display</span><h3>Their own channel</h3><p>Uploads go to each person's channel as private videos. The server keeps nobody's footage.</p></div></div>
+          <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">smart_display</span><h3>Their own channel</h3><p>Uploads go to each person's channel as private videos, unless you choose to keep the footage on a storage you run.</p></div></div>
           <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">login</span><h3>Sign in your way</h3><p>Local accounts, or Nextcloud: its groups become roles, so administrators and users come from the groups you already have.</p></div></div>
           <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">router</span><h3>A guide for the router</h3><p>Each friend gets step-by-step instructions, or a ready-made prompt for an AI assistant. Ports are opened only for the server's IP.</p></div></div>
           <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">admin_panel_settings</span><h3>An admin page</h3><p>Users, camera status and the day's YouTube quota at a glance. Deactivate someone and their recorder stops at once.</p></div></div>
@@ -140,7 +141,22 @@
       </div>
     </section>
 
-    <section class="section section-alt" id="run" aria-labelledby="run-title">
+        <section class="section section-alt" id="storage" aria-labelledby="storage-title">
+      <div class="container">
+        <p class="eyebrow eyebrow-dark">New · optional</p>
+        <h2 id="storage-title">Choose where the recordings go</h2>
+        <p class="section-lead">YouTube stays the default. If you would rather keep the footage somewhere else, send it to your own cloud or disk instead.</p>
+        <div class="row">
+          <div class="col-md-6 col-lg-3"><div class="card feature"><span class="mi" aria-hidden="true">smart_display</span><h3>YouTube</h3><p>Private videos, one playlist per day. The default, unchanged.</p></div></div>
+          <div class="col-md-6 col-lg-3"><div class="card feature"><span class="mi" aria-hidden="true">cloud</span><h3>WebDAV</h3><p>Nextcloud, ownCloud, Synology and anything else that speaks WebDAV.</p></div></div>
+          <div class="col-md-6 col-lg-3"><div class="card feature"><span class="mi" aria-hidden="true">sync_alt</span><h3>rclone</h3><p>Mega, S3-compatible storage, Dropbox, OneDrive and dozens more (Mega not tested by the author).</p></div></div>
+          <div class="col-md-6 col-lg-3"><div class="card feature"><span class="mi" aria-hidden="true">folder</span><h3>A folder</h3><p>Plain files on the machine that runs it.</p></div></div>
+        </div>
+        <p class="note"><span class="mi small" aria-hidden="true">play_circle</span> With several accounts the server picks the default and each person may use their own YouTube or WebDAV where you allow it. Every video has two buttons: <strong>Watch here</strong> plays it on the page, <strong>Open the video</strong> goes to where it lives. <a href="https://github.com/LuigiElleBalotta/tapo-uploader#where-the-recordings-go">Read how it works</a>.</p>
+      </div>
+    </section>
+
+    <section class="section" id="run" aria-labelledby="run-title">
       <div class="container">
         <h2 id="run-title">Run it where you like</h2>
         <p class="section-lead">The program must stay on 24/7 and reach the camera. The README compares the options honestly, including what was and wasn't tested.</p>
@@ -153,7 +169,7 @@
       </div>
     </section>
 
-    <section class="section" id="start" aria-labelledby="start-title">
+    <section class="section section-alt" id="start" aria-labelledby="start-title">
       <div class="container">
         <h2 id="start-title">Quick start</h2>
         <p class="section-lead">You need Python 3.10+, ffmpeg, a Google account with a YouTube channel, and the camera account from the Tapo app. The full guide covers every step, including the Google Cloud project and the router.</p>
@@ -171,7 +187,7 @@
       </div>
     </section>
 
-    <section class="section section-alt" id="faq" aria-labelledby="faq-title">
+    <section class="section" id="faq" aria-labelledby="faq-title">
       <div class="container">
         <h2 id="faq-title">Questions</h2>
         <div class="row">
@@ -183,7 +199,9 @@
           </div>
           <div class="col-lg-6">
             <h3>Will the videos be public?</h3>
-            <p>No. They are uploaded as private and only your Google account can see them.</p>
+            <p>No. On YouTube they are uploaded as private and only your Google account can see them; on WebDAV, rclone or a folder they sit where only you (and the server's administrator) can read them.</p>
+            <h3>Can I keep them somewhere other than YouTube?</h3>
+            <p>Yes: WebDAV (Nextcloud and similar), a local folder, or anything rclone supports, such as Mega or S3 storage.</p>
             <h3>Can several people share one server?</h3>
             <p>Yes, with the optional multi-account mode: each person links their own camera and YouTube channel and sees only their own videos.</p>
             <h3>Is it a replacement for a cloud plan?</h3>

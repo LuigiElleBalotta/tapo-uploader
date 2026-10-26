@@ -1,6 +1,33 @@
 {% extends "base.html" %}
 {% block title %}Your page · tapo-uploader{% endblock %}
 {% block content %}
+{% macro video_groups(playlists, empty) %}
+{% for playlist in playlists %}
+<div class="card app-card">
+  <h3 class="h5">{% if playlist.url %}<a href="{{ playlist.url }}" target="_blank" rel="noopener noreferrer">{{ playlist.title }}</a>{% else %}{{ playlist.title }}{% endif %}</h3>
+  <div class="row">
+    {% for video in playlist.videos %}
+    <div class="col-6 col-md-4 col-lg-3 mb-3">
+      <div class="video-card" data-kind="{{ video.kind }}" data-ref="{{ video.ref }}" data-title="{{ video.title }}">
+        <div class="video-stage">
+          {% if video.thumbnail %}<img src="{{ video.thumbnail }}" alt="" loading="lazy" class="img-fluid">
+          {% else %}<div class="video-placeholder" aria-hidden="true"><span class="mi">movie</span></div>{% endif %}
+        </div>
+        <span class="video-title">{{ video.title }}</span>
+        <span class="text-muted video-date">{{ video.published }}{% if video.size %} · {{ video.size }}{% endif %}</span>
+        <div class="video-actions">
+          <button class="btn btn-primary btn-sm btn-round" type="button" data-watch>Watch here</button>
+          {% if video.url %}<a class="btn btn-neutral btn-sm btn-round" href="{{ video.url }}" target="_blank" rel="noopener noreferrer">Open the video</a>{% endif %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% else %}
+<div class="card app-card"><p class="mb-0">{{ empty }}</p></div>
+{% endfor %}
+{% endmacro %}
 <h1 class="h3">Hello, {{ current_user().display_name }}</h1>
 
 <h2 class="h5 section-title">Your camera</h2>
@@ -29,6 +56,14 @@
 </div>
 {% if can_add_camera %}<p><a class="btn btn-primary btn-round" href="/cameras/new">Add a camera</a></p>{% endif %}
 
+{% if notice %}<div class="alert alert-warning" role="alert">{{ notice }} <a href="/storage">Recordings settings</a></div>{% endif %}
+{% if files %}
+<h2 class="h5 section-title">Your videos on {{ files.label }}</h2>
+{% if files.problem %}
+<div class="alert alert-warning" role="alert">The videos could not load just now (the storage did not answer). Your recordings are safe; try again in a few minutes. <a href="/storage">Recordings settings</a>.</div>
+{% endif %}
+{{ video_groups(files.playlists, "No videos yet. The first ones appear after the first daily upload.") }}
+{% else %}
 <h2 class="h5 section-title">Your videos on YouTube</h2>
 {% if not youtube.linked %}
 <div class="card app-card">
@@ -41,23 +76,7 @@
 <div class="alert alert-warning" role="alert">YouTube did not answer just now. Your videos are safe; try again in a few minutes.</div>
 {% else %}
 <p class="text-muted">Channel: <strong>{{ youtube.channel }}</strong> · <a href="/youtube">manage</a></p>
-{% for playlist in youtube.playlists %}
-<div class="card app-card">
-  <h3 class="h5"><a href="{{ playlist.url }}" target="_blank" rel="noopener noreferrer">{{ playlist.title }}</a></h3>
-  <div class="row">
-    {% for video in playlist.videos %}
-    <div class="col-6 col-md-4 col-lg-3 mb-3">
-      <a class="video-tile" href="{{ video.url }}" target="_blank" rel="noopener noreferrer">
-        {% if video.thumbnail %}<img src="{{ video.thumbnail }}" alt="" loading="lazy" class="img-fluid">{% endif %}
-        <span class="video-title">{{ video.title }}</span>
-        <span class="text-muted video-date">{{ video.published }}</span>
-      </a>
-    </div>
-    {% endfor %}
-  </div>
-</div>
-{% else %}
-<div class="card app-card"><p class="mb-0">No daily playlist yet. The first one appears after the first upload.</p></div>
-{% endfor %}
+{{ video_groups(youtube.playlists, "No daily playlist yet. The first one appears after the first upload.") }}
+{% endif %}
 {% endif %}
 {% endblock %}

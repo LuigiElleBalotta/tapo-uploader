@@ -2,9 +2,10 @@
 # Secrets are not baked in: pass them as environment variables (see render.yaml / README.md).
 FROM python:3.12-slim
 
-# ffmpeg records the stream; tzdata makes TZ=Europe/Rome work in a slim image
+# ffmpeg records the stream; tzdata makes TZ=Europe/Rome work in a slim image;
+# rclone lets the recordings go to Mega, S3, Dropbox... (STORAGE=rclone)
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg tzdata \
+    && apt-get install -y --no-install-recommends ffmpeg tzdata rclone \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -12,6 +13,7 @@ WORKDIR /app
 COPY requirements.txt requirements-web.txt ./
 RUN pip install --no-cache-dir -r requirements-web.txt
 COPY tapo_uploader.py tapo_motion.py camera_context.py camera_worker.py ./
+COPY tapo_storage ./tapo_storage
 COPY tapo_web ./tapo_web
 RUN mkdir -p /data
 

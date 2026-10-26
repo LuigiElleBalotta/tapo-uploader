@@ -12,10 +12,13 @@ import threading
 import time
 from datetime import datetime
 
+from tapo_storage.base import StorageError
+
 from .cameras import camera_data_dir, safe_context
 from .crypto import VaultError
 from .quota import QuotaLedger, UploadGate, stagger_slots
 from .security import UnsafeHost
+from .storage import build, resolve
 from .youtube_link import LinkRevoked, youtube_for_user
 
 log = logging.getLogger("tapo.web")
@@ -89,7 +92,7 @@ class Supervisor:
             return client
         return factory
 
-    def _start(self, camera, slot):
+    def _start(self, camera, slot, resolved):
         cid = camera["id"]
         try:
             ctx = safe_context(camera, self.vault, self.settings, youtube=self._youtube_factory(camera["user_id"]),
@@ -100,15 +103,20 @@ class Supervisor:
         except VaultError:
             self._problem(camera, "error", "The stored camera credentials cannot be read.")
             return
-        ctx = dataclasses.replace(ctx, upload_at=slot)  # each camera uploads in its own time slot
+        try:
+            storage = build(resolved, self.settings, ctx, self.resolver)
+        except StorageError as err:
+            self._problem(camera, "error", f"The recordings destination cannot be used: {err}")
+            return
+        ctx = dataclasses.replace(ctx, upload_at=slot, storage=storage)  # each camera uploads in its own time slot
         ctx.ensure_dirs()
         import tapo_motion
         for _, path in tapo_motion.segments(ctx):
             path.unlink(missing_ok=True)  # leftovers of a previous run
-        gate = UploadGate(self.ledger, cid, slot)
+        gate = UploadGate(self.ledger, cid, slot) if resolved.kind == "youtube" else None  # only YouTube has a quota
         worker = self.worker_factory(ctx, lambda kind, detail="", cid=cid: self._on_status(cid, kind, detail), gate=gate)
         worker.start()
-        self.running[cid] = {"worker": worker, "signature": _signature(camera)}
+        self.running[cid] = {"worker": worker, "signature": _signature(camera), "storage": resolved.signature()}
         log.info("camera %s: worker started", cid)
 
     def _problem(self, camera, status, message):
@@ -119,10 +127,11 @@ class Supervisor:
 
     def sync(self):
         wanted = {camera["id"]: camera for camera in self.db.all_enabled_cameras()}
+        resolved = {cid: resolve(self.settings, self.db, self.vault, camera["user_id"]) for cid, camera in wanted.items()}
         with self.lock:
             for cid in list(self.running):
                 entry, camera = self.running[cid], wanted.get(cid)
-                if camera is None or _signature(camera) != entry["signature"]:
+                if camera is None or _signature(camera) != entry["signature"] or resolved[cid].signature() != entry["storage"]:
                     entry["worker"].stop()
                     del self.running[cid]
                     self.backoff.pop(cid, None)
@@ -134,14 +143,16 @@ class Supervisor:
                     self.backoff[cid] = {"failures": failures,
                                          "not_before": self.clock() + min(300, 5 * 2 ** failures)}
                     log.warning("camera %s: worker died, restart in %ss", cid, min(300, 5 * 2 ** failures))
-            slots = stagger_slots(list(wanted), self.settings.upload_at, self.settings.upload_stagger_minutes)
+            # the quota is YouTube's: only its cameras take turns, the others upload at the base time
+            slots = stagger_slots([cid for cid in wanted if resolved[cid].kind == "youtube"], self.settings.upload_at,
+                                  self.settings.upload_stagger_minutes)
             for cid, camera in wanted.items():
                 if cid in self.running:
                     continue
                 wait = self.backoff.get(cid)
                 if wait and self.clock() < wait["not_before"]:
                     continue
-                self._start(camera, slots[cid])
+                self._start(camera, slots.get(cid, self.settings.upload_at), resolved[cid])
 
     def _mark_stopped(self, camera_id):
         if self.db.camera_by_id(camera_id):
@@ -192,7 +203,8 @@ class Supervisor:
         purge_inactive(self.db, self.settings.data_dir, now, self.settings.retention_days)
         self.db.purge_events(EVENT_DAYS)
         for user in self.db.list_users():
-            if self.db.youtube_link(user["id"]) is None:  # nothing can upload their clips: do not fill the disk
+            if (resolve(self.settings, self.db, self.vault, user["id"]).kind == "youtube"
+                    and self.db.youtube_link(user["id"]) is None):  # nothing can upload their clips: do not fill the disk
                 for camera in self.db.cameras_for_user(user["id"]):
                     discard_stale_clips(camera_data_dir(self.settings, camera) / "events", now, STALE_CLIP_DAYS)
 

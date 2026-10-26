@@ -5,14 +5,19 @@ import threading
 import time
 from urllib.parse import quote
 
+from types import SimpleNamespace
+
 from flask import render_template
 
+from .cameras import camera_data_dir
+from .storage import build, resolve
 from .youtube_link import LinkRevoked, youtube_for_user
 
 log = logging.getLogger("tapo.web")
 PLAYLIST_PREFIX = "Tapo"
 MAX_PLAYLIST_PAGES = 4
 THUMBNAIL_HOST = "https://i.ytimg.com/"
+MEDIA_LABELS = {"webdav": "WebDAV", "local": "the server", "rclone": "your cloud storage"}
 
 
 def ago(timestamp, now=None):
@@ -74,13 +79,37 @@ def list_playlists(yt, prefix=PLAYLIST_PREFIX, limit=10):
         for video in items:
             snippet = video["snippet"]
             video_id = snippet["resourceId"]["videoId"]
-            videos.append({"id": video_id, "title": snippet.get("title", ""), "thumbnail": _thumbnail(snippet),
+            videos.append({"id": video_id, "kind": "youtube", "ref": video_id, "title": snippet.get("title", ""),
+                           "thumbnail": _thumbnail(snippet),
                            "published": (snippet.get("publishedAt") or "")[:10],
                            "url": f"https://www.youtube.com/watch?v={quote(video_id, safe='')}"})
         result.append({"id": entry["id"], "title": entry["snippet"]["title"],
                        "url": f"https://www.youtube.com/playlist?list={quote(entry['id'], safe='')}",
                        "videos": videos})
     return result
+
+
+def size_label(size):
+    if size is None:
+        return ""
+    value = float(size)
+    for unit in ("B", "KB", "MB"):
+        if value < 1024:
+            return f"{value:.0f} B" if unit == "B" else f"{value:.1f} {unit}"
+        value /= 1024
+    return f"{value:.1f} GB"
+
+
+def list_files(storage, camera_id, prefix=PLAYLIST_PREFIX, label="", limit=10):
+    """The same shape as `list_playlists`, for a destination that keeps plain files: one group per day."""
+    groups = []
+    for day in storage.days(limit):
+        videos = [{"kind": "file", "ref": f"/media/{camera_id}/{day}/{quote(video.name, safe='')}",
+                   "title": video.name[:-4] if video.name.endswith(".mp4") else video.name, "thumbnail": None,
+                   "published": video.modified, "url": video.url, "size": size_label(video.size)}
+                  for video in storage.list_day(day)]
+        groups.append({"id": day, "title": f"{label}{prefix} {day}", "url": None, "videos": videos})
+    return groups
 
 
 def camera_cards(db, supervisor, user_id, now=None):
@@ -120,10 +149,30 @@ def register(app):
             log.warning("could not list playlists: %s", type(err).__name__)
             return {"linked": True, "channel": link["channel_title"], "problem": "error"}
 
+    def files_section(user_id, resolved):
+        """The videos a file destination (WebDAV, folder, rclone) holds for each of the user's cameras."""
+        cameras = db.cameras_for_user(user_id)
+        groups, problem = [], None
+        for camera in cameras:
+            ctx = SimpleNamespace(data_dir=camera_data_dir(settings, camera), playlist_prefix=PLAYLIST_PREFIX)
+            label = f"{camera['name']} · " if len(cameras) > 1 else ""
+            try:
+                def load(ctx=ctx, camera=camera, label=label):
+                    storage = build(resolved, settings, ctx, state["resolver"])
+                    return list_files(storage, camera["id"], label=label)
+                groups += cache.get((user_id, camera["id"], resolved.signature()), load)
+            except Exception as err:  # the destination is down, the cloud login expired...: the page must still open
+                log.warning("could not list videos: %s", type(err).__name__)
+                problem = "error"
+        return {"label": MEDIA_LABELS.get(resolved.kind, resolved.kind), "playlists": groups, "problem": problem}
+
     @app.get("/")
     @app.login_required
     def home():
         user = app.current_user()
         cameras = camera_cards(db, state["supervisor"], user["id"])
-        return render_template("dashboard.html", cameras=cameras, youtube=youtube_section(user["id"]),
-                               can_add_camera=len(cameras) < settings.max_cameras_per_user)
+        resolved = resolve(settings, db, vault, user["id"])
+        files = files_section(user["id"], resolved) if resolved.kind != "youtube" else None
+        return render_template("dashboard.html", cameras=cameras, can_add_camera=len(cameras) < settings.max_cameras_per_user,
+                               youtube=youtube_section(user["id"]) if files is None else None, files=files,
+                               notice=resolved.notice)
