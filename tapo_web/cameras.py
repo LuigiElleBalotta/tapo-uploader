@@ -33,6 +33,10 @@ def assign_ports(taken, start, end, rng=None):
     raise NoFreePorts("no free external ports left in the configured range")
 
 
+def camera_data_dir(settings, camera):
+    return settings.data_dir / "users" / str(camera["user_id"]) / f"camera-{camera['id']}"
+
+
 def context_for(camera, vault, settings, youtube=None):
     """The CameraContext the recording code needs, built from a database row (secrets decrypted here only)."""
     return CameraContext(
@@ -44,7 +48,7 @@ def context_for(camera, vault, settings, youtube=None):
         stream=camera["stream"],
         onvif_host=camera["host"],
         onvif_port=camera["onvif_port"],
-        data_dir=settings.data_dir / "users" / str(camera["user_id"]) / f"camera-{camera['id']}",
+        data_dir=camera_data_dir(settings, camera),
         upload_at=settings.upload_at,
         youtube=youtube,
     )

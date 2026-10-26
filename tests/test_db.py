@@ -133,3 +133,17 @@ def test_camera_count_and_ports(db):
     assert db.camera_ports() == {40010, 40020, 40030, 40040}
     db.delete_camera(a, c1)
     assert db.camera_count() == 1 and db.camera_ports() == {40030, 40040}
+
+
+def test_camera_by_id_is_for_the_supervisor_only(db):
+    a = db.add_user("local", "a", "A", "user")
+    cam = db.add_camera(a, "one", "h", 40010, 40020, "stream1", "u", "p")
+    assert db.camera_by_id(cam)["user_id"] == a and db.camera_by_id(999) is None
+
+
+def test_events_newest_first_even_with_equal_times(db):
+    a = db.add_user("local", "a", "A", "user")
+    cam = db.add_camera(a, "one", "h", 40010, 40020, "stream1", "u", "p")
+    for kind in ("first", "second", "third"):
+        db.add_event(cam, kind, "", ts=1000.0)
+    assert [e["kind"] for e in db.events_for_camera(cam)] == ["third", "second", "first"]

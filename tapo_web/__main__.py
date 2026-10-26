@@ -51,10 +51,20 @@ def main(argv=None, environ=None):
     # run: the first start can create the administrator from the environment
     if not db.list_users() and environ.get("ADMIN_USERNAME") and environ.get("ADMIN_PASSWORD"):
         create_admin(db, environ["ADMIN_USERNAME"], environ["ADMIN_PASSWORD"])
+    if not settings.multiuser:
+        sys.exit("Set MULTIUSER=1 (with ENCRYPTION_KEY and SECRET_KEY) to run the web app.")
     from waitress import serve
 
     from .app import create_app
-    serve(create_app(settings, db), host=environ.get("HOST", "0.0.0.0"), port=int(environ.get("PORT", "8080")))
+    from .crypto import Vault
+    from .supervisor import Supervisor
+
+    supervisor = Supervisor(db, Vault(settings.encryption_key), settings)
+    supervisor.start()
+    try:
+        serve(create_app(settings, db), host=environ.get("HOST", "0.0.0.0"), port=int(environ.get("PORT", "8080")))
+    finally:
+        supervisor.stop_all()
 
 
 if __name__ == "__main__":

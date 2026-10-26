@@ -141,6 +141,10 @@ class Database:
             (user_id, name, host, port, onvif_port, stream, username_enc, password_enc, time.time()))
         return cursor.lastrowid
 
+    def camera_by_id(self, camera_id):
+        """Not scoped to a user: for the supervisor, never for a request on behalf of a user."""
+        return self._one("SELECT * FROM cameras WHERE id = ?", (camera_id,))
+
     def camera_for_user(self, user_id, camera_id):
         return self._one("SELECT * FROM cameras WHERE id = ? AND user_id = ?", (camera_id, user_id))
 
@@ -203,7 +207,7 @@ class Database:
                   (camera_id, ts if ts is not None else time.time(), kind, detail))
 
     def events_for_camera(self, camera_id, limit=50):
-        return self._all("SELECT * FROM events WHERE camera_id = ? ORDER BY ts DESC LIMIT ?", (camera_id, limit))
+        return self._all("SELECT * FROM events WHERE camera_id = ? ORDER BY ts DESC, id DESC LIMIT ?", (camera_id, limit))
 
     def purge_events(self, older_than_days):
         self._run("DELETE FROM events WHERE ts < ?", (time.time() - older_than_days * 86400,))
