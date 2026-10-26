@@ -13,7 +13,7 @@
           {% if video.thumbnail %}<img src="{{ video.thumbnail }}" alt="" loading="lazy" class="img-fluid">
           {% else %}<div class="video-placeholder" aria-hidden="true"><span class="mi">movie</span></div>{% endif %}
         </div>
-        <span class="video-title">{{ video.title }}</span>
+        <span class="video-title">{{ video.title }}{% if video.pending %} <span class="badge badge-idle">Not uploaded yet</span>{% endif %}</span>
         <span class="text-muted video-date">{{ video.published }}{% if video.size %} · {{ video.size }}{% endif %}</span>
         <div class="video-actions">
           {% if video.watchable %}<button class="btn btn-primary btn-sm btn-round" type="button" data-watch>Watch here</button>{% endif %}
@@ -55,6 +55,12 @@
   {% endif %}
 </div>
 {% if can_add_camera %}<p><a class="btn btn-primary btn-round" href="/cameras/new">Add a camera</a></p>{% endif %}
+
+{% if pending %}
+<h2 class="h5 section-title">Waiting for upload</h2>
+<p class="text-muted">These clips are still on the server and go to your storage at the next daily upload. You can watch them now.</p>
+{{ video_groups(pending, "") }}
+{% endif %}
 
 {% if notice %}<div class="alert alert-warning" role="alert">{{ notice }} <a href="/storage">Recordings settings</a></div>{% endif %}
 {% if files %}

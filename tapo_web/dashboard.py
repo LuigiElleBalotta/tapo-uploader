@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from flask import render_template
 
 from .cameras import camera_data_dir
+from .pending import list_pending, size_label  # noqa: F401  (size_label is part of this module's API)
 from .storage import build, resolve
 from .youtube_link import LinkRevoked, youtube_for_user
 
@@ -91,17 +92,6 @@ def list_playlists(yt, prefix=PLAYLIST_PREFIX, limit=10):
     return result
 
 
-def size_label(size):
-    if size is None:
-        return ""
-    value = float(size)
-    for unit in ("B", "KB", "MB"):
-        if value < 1024:
-            return f"{value:.0f} B" if unit == "B" else f"{value:.1f} {unit}"
-        value /= 1024
-    return f"{value:.1f} GB"
-
-
 def list_files(storage, camera_id, prefix=PLAYLIST_PREFIX, label="", limit=10):
     """The same shape as `list_playlists`, for a destination that keeps plain files: one group per day."""
     groups = []
@@ -169,6 +159,15 @@ def register(app):
                 problem = "error"
         return {"label": MEDIA_LABELS.get(resolved.kind, resolved.kind), "playlists": groups, "problem": problem}
 
+    def pending_section(user_id):
+        """The clips still waiting for the upload, which can be watched before they leave the server."""
+        cameras = db.cameras_for_user(user_id)
+        groups = []
+        for camera in cameras:
+            label = f"{camera['name']} · " if len(cameras) > 1 else ""
+            groups += list_pending(camera_data_dir(settings, camera) / "events", camera["id"], label)
+        return groups
+
     @app.get("/")
     @app.login_required
     def home():
@@ -178,4 +177,5 @@ def register(app):
         files = files_section(user["id"], resolved) if resolved.kind != "youtube" else None
         return render_template("dashboard.html", cameras=cameras, can_add_camera=len(cameras) < settings.max_cameras_per_user,
                                youtube=youtube_section(user["id"]) if files is None else None, files=files,
+                               pending=pending_section(user["id"]),
                                notice=resolved.notice)

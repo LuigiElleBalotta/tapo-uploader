@@ -693,6 +693,8 @@ its owner). **Open the video** goes to the video on YouTube, or to the file in y
 folder or rclone). YouTube does not play **private** videos (the default) inside another site, so for those the card only has **Open the video**; **Watch here** appears for public and unlisted videos and for every other destination. The audio is converted to AAC while recording and the video is copied as it comes: keep the
 camera on H.264, because H.265 files may not play in some browsers.
 
+Clips that have not been uploaded yet (waiting for the daily upload) appear in a **Waiting for upload** group, marked **Not uploaded yet**, and can be watched with **Watch here** straight from the server, whatever the destination.
+
 ---
 
 ## Daily use

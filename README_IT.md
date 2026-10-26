@@ -662,6 +662,8 @@ YouTube o al file nel tuo cloud (niente per cartella locale o rclone). YouTube n
 registrazione e il video è copiato così com'è: tieni la camera su H.264, perché i file H.265 potrebbero non partire in
 alcuni browser.
 
+Le clip non ancora caricate (in attesa dell'upload giornaliero) compaiono nel gruppo **Waiting for upload**, segnate **Not uploaded yet**, e si guardano con **Watch here** direttamente dal server, qualunque sia la destinazione.
+
 ---
 
 ## Uso quotidiano
