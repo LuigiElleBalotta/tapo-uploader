@@ -1,0 +1,24 @@
+# Records a Tapo camera and uploads each segment to YouTube (private).
+# Install: sudo cp tapo-uploader.service /etc/systemd/system/ && sudo systemctl daemon-reload
+#          sudo systemctl enable --now tapo-uploader
+# Status:  systemctl status tapo-uploader        Logs: journalctl -u tapo-uploader -f
+# After editing .env or tapo_uploader.py: sudo systemctl restart tapo-uploader
+# Replace UTENTE with your Linux user and adjust the paths if the project lives elsewhere.
+
+[Unit]
+Description=Tapo camera recorder and YouTube uploader
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Without TZ a UTC server cuts segments at 01:00/07:00/13:00/19:00 Italian time
+# and switches playlist at UTC midnight.
+Environment=TZ=Europe/Rome
+User=UTENTE
+WorkingDirectory=/home/UTENTE/tapo-uploader
+ExecStart=/home/UTENTE/tapo-uploader/.venv/bin/python -u tapo_uploader.py run
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

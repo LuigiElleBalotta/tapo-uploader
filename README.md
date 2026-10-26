@@ -1,0 +1,394 @@
+# tapo-uploader
+
+Registra lo stream di una telecamera **TP-Link Tapo** (testato su C200) e carica da solo i
+video su **YouTube come privati**, con una **playlist per ogni giorno**. Dopo l'upload il file
+viene cancellato dal disco.
+
+```
+ Tapo C200 ──RTSP──▶ ffmpeg ──▶ segmenti .mp4 ──▶ YouTube API ──▶ playlist "Tapo 2026-10-26"
+ (casa)                        (cartella recordings/)             (video privati, file cancellato)
+```
+
+La telecamera non sa caricare nulla da sola: serve un computer sempre acceso (un VPS, un
+Raspberry Pi, un mini PC) che legga lo stream e faccia l'upload. Questa guida racconta il
+setup completo, passo per passo, com'è stato fatto davvero, compresi i problemi incontrati.
+
+- [Cosa fa e cosa serve](#cosa-fa-e-cosa-serve)
+- [1. La telecamera](#1-la-telecamera)
+- [2. Google Cloud e YouTube](#2-google-cloud-e-youtube)
+- [3. Installazione e prova sul tuo PC](#3-installazione-e-prova-sul-tuo-pc)
+- [4. Il server](#4-il-server)
+- [5. Raggiungere la camera da internet](#5-raggiungere-la-camera-da-internet)
+- [6. Verifica finale](#6-verifica-finale)
+- [Uso quotidiano](#uso-quotidiano)
+- [Configurazione](#configurazione)
+- [Come funziona](#come-funziona)
+- [Quota YouTube](#quota-youtube)
+- [Sicurezza](#sicurezza)
+- [Problemi comuni](#problemi-comuni)
+
+---
+
+## Cosa fa e cosa serve
+
+`tapo_uploader.py run` avvia due thread:
+
+1. **Registrazione.** ffmpeg legge lo stream RTSP con `-c copy` (il video non viene
+   ricodificato, quindi quasi nessun carico CPU) e scrive file `AAAAMMGG_HHMMSS.mp4` in
+   `recordings/`. I tagli sono allineati all'orologio: con segmenti da 6 ore si chiudono a
+   00:00, 06:00, 12:00 e 18:00. Se lo stream cade, ffmpeg riparte da solo.
+2. **Upload.** Ogni minuto cerca i segmenti completi, li carica come video `private` col
+   titolo `Tapo AAAA-MM-GG HH:MM-HH:MM`, li aggiunge alla playlist `Tapo AAAA-MM-GG` (creata
+   se manca) e **cancella il file**. Se l'upload fallisce, il file resta e viene ritentato.
+
+| Cosa serve | Note |
+|---|---|
+| Telecamera Tapo con RTSP | C200 e simili. Serve l'"Account camera" (vedi passo 1). |
+| Un computer sempre acceso | Linux consigliato (VPS, Raspberry Pi). Python 3.10 o più recente e ffmpeg. |
+| Un account Google con un canale YouTube | I video finiscono nel suo canale. |
+| Accesso al router (solo se il server non è in casa) | Per aprire una porta verso la camera. |
+
+Spazio disco: a 640×360 un segmento da 6 ore pesa circa 0,4 GB. Servono pochi GB liberi,
+perché i file vengono cancellati dopo l'upload.
+
+---
+
+## 1. La telecamera
+
+1. Nell'app Tapo apri la camera, poi **Impostazioni (ingranaggio) → Avanzate → Account camera**.
+   Crea un nome utente e una password **solo per la camera**. Non sono quelli del tuo account
+   Tapo/cloud, ed è un errore comune: con quelli ricevi `401 Unauthorized`.
+2. Cerca l'indirizzo IP della camera nell'app (Info dispositivo) o nel router, e meglio
+   ancora assegnale un IP fisso (prenotazione DHCP) nel router.
+3. Imposta la qualità video su **Alta** (Impostazioni → Qualità video). Di default può essere
+   bassa: nel nostro caso entrambi gli stream erano 640×360.
+4. L'indirizzo dello stream è:
+
+   ```
+   rtsp://UTENTE:PASSWORD@IP_CAMERA:554/stream1     (qualità alta)
+   rtsp://UTENTE:PASSWORD@IP_CAMERA:554/stream2     (qualità bassa)
+   ```
+
+   Se la password ha caratteri speciali (`!`, `@`, `:`) vanno codificati nell'URL. Lo script
+   lo fa da solo, a mano è più semplice usare una password solo con lettere e numeri.
+
+> **Limite importante:** la camera accetta **una sola sessione RTSP per stream**. Se il servizio
+> sta registrando `stream1`, un secondo programma che apre `stream1` riceve
+> `Operation not permitted`. Per fare prove mentre il servizio gira usa `stream2`
+> (`CAMERA_STREAM=stream2`) oppure ferma prima il servizio.
+
+---
+
+## 2. Google Cloud e YouTube
+
+Lo script carica sul tuo canale con l'API ufficiale (YouTube Data API v3), quindi serve un
+piccolo "progetto" Google che identifichi l'app. È gratis.
+
+### 2.1 Progetto e API
+
+1. Vai su <https://console.cloud.google.com/projectcreate>, nome `tapo-uploader`, **Crea**.
+2. Apri <https://console.cloud.google.com/apis/library/youtube.googleapis.com> e premi
+   **Abilita** (con il progetto appena creato selezionato in alto).
+
+### 2.2 Schermata di consenso OAuth
+
+1. Apri <https://console.cloud.google.com/auth/overview> e premi **Inizia**.
+2. Nome app `tapo-uploader`, email di assistenza = la tua.
+3. Pubblico: **Esterno**. Email di contatto = la tua. Accetta e **Crea**.
+4. In **Pubblico → Utenti di test → Add users** aggiungi **il tuo account Google**, quello
+   proprietario del canale YouTube.
+
+### 2.3 Credenziali
+
+1. **Client → Crea client**. Tipo: **App desktop**, nome `tapo-uploader`. **Crea**.
+2. Premi **Scarica JSON** e salva il file come `client_secret.json` nella cartella del progetto.
+   È un segreto: non committarlo (il `.gitignore` lo esclude).
+
+### 2.4 Pubblicare l'app (importante)
+
+Finché l'app resta in **Test**, il token di accesso **scade dopo 7 giorni** e lo script smette
+di caricare finché non rifai il login. Per evitarlo bisogna pubblicare l'app ("In produzione").
+Per uso personale non serve alcuna verifica da parte di Google, ma il pulsante
+**Pubblica app** resta disattivato finché in **Branding** non ci sono:
+
+- un link alla **home page** dell'app,
+- un link alla **privacy policy**,
+- il **dominio autorizzato** corrispondente.
+
+Non serve un sito vero: bastano due pagine statiche. Il modo più veloce è **GitHub Pages**:
+
+1. Crea un repository pubblico (anche questo va bene) con due file, `index.html` (una riga
+   su cosa fa l'app) e `privacy.html` (cosa accede, cosa viene salvato, come revocare
+   l'accesso). In questo repository ci sono entrambi, da copiare e adattare.
+2. In *Settings → Pages* scegli il ramo `main`, cartella `/`.
+3. Dopo un minuto le pagine sono su `https://TUOUTENTE.github.io/NOME-REPO/`.
+4. In Google Cloud, **Branding → Dominio app**: inserisci home page e privacy policy; in
+   **Domini autorizzati → Aggiungi dominio** metti `TUOUTENTE.github.io`. Salva.
+5. **Pubblico → Pubblica app → Conferma** ("Eseguire il push in produzione?").
+
+> Fai la pubblicazione **prima** di creare il token (passo 3). Un token creato mentre l'app
+> era in Test può restare soggetto alla scadenza di 7 giorni anche dopo la pubblicazione: per
+> sicurezza cancella `token.json` e rifai `auth` dopo aver pubblicato.
+
+---
+
+## 3. Installazione e prova sul tuo PC
+
+Questi passi valgono su qualunque sistema (Windows, macOS, Linux). Servono Python 3.10+ e
+**ffmpeg** nel PATH (`ffmpeg -version` per controllare).
+
+```bash
+git clone https://github.com/LuigiElleBalotta/tapo-uploader.git
+cd tapo-uploader
+python -m venv .venv
+. .venv/bin/activate            # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env            # poi compila CAMERA_USER, CAMERA_PASS, CAMERA_HOST
+```
+
+Metti `client_secret.json` (passo 2.3) nella cartella, poi:
+
+```bash
+python tapo_uploader.py check   # 1. la camera risponde? mostra codec e risoluzione
+python tapo_uploader.py auth    # 2. login Google, una volta sola: crea token.json
+python tapo_uploader.py test    # 3. registra 60 s e li carica: verifica tutto
+```
+
+- **`check`** deve stampare `codec_name=h264`, la risoluzione e l'audio. Se dà
+  `401 Unauthorized` le credenziali sono sbagliate; `Operation not permitted` vuol dire che
+  lo stream è già occupato (vedi sopra).
+- **`auth`** stampa un indirizzo: aprilo in un browser **sullo stesso computer**, scegli
+  l'account Google del canale e consenti l'accesso a YouTube. Il browser mostra
+  "The authentication flow has completed" e compare `token.json`. Se in Test vedi
+  "Google non ha verificato questa app": *Avanzate → Vai a tapo-uploader*.
+- **`test`** registra 60 secondi, li carica come video privato e crea la playlist del
+  giorno. Controlla su YouTube che il video ci sia e poi cancellalo dallo Studio.
+
+Se il server non ha un browser, fai `auth` sul tuo PC e copia `token.json` sul server.
+
+---
+
+## 4. Il server
+
+Esempio su Ubuntu/Debian (un VPS, un Raspberry Pi, un mini PC). Sostituisci `UTENTE` con il
+tuo utente Linux.
+
+```bash
+sudo apt-get update
+sudo apt-get install -y ffmpeg python3-venv      # python3-venv serve davvero su Ubuntu
+
+mkdir -p ~/tapo-uploader && cd ~/tapo-uploader
+# copia qui: tapo_uploader.py, requirements.txt, .env, client_secret.json, token.json
+chmod 600 .env client_secret.json token.json     # solo tu puoi leggerli
+
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
+
+Il `.env` del server è quello del PC, con `CAMERA_HOST` e `CAMERA_PORT` che puntano alla
+camera **vista da internet** (passo 5), non all'IP di casa.
+
+### Servizio systemd
+
+Così parte all'avvio e si riavvia da solo se si ferma (non serve un cron).
+
+```bash
+sudo cp deploy/tapo-uploader.service /etc/systemd/system/
+sudo nano /etc/systemd/system/tapo-uploader.service   # imposta UTENTE e i percorsi
+sudo systemctl daemon-reload
+sudo systemctl enable tapo-uploader
+```
+
+**Non avviarlo ancora**: prima il passo 5 e la verifica del passo 6.
+
+Il file imposta `Environment=TZ=Europe/Rome`: senza, un server in UTC taglia i segmenti
+all'una di notte ora italiana e cambia playlist a mezzanotte UTC. Cambia il fuso se serve.
+
+---
+
+## 5. Raggiungere la camera da internet
+
+Se il server è nella stessa rete della camera, salta questo passo e usa l'IP locale.
+Altrimenti la camera, che sta dietro al router di casa, va resa raggiungibile **solo dal
+tuo server**.
+
+> L'app Tapo funziona da fuori casa perché la camera si collega *in uscita* ai server
+> TP-Link. Questo non vale per RTSP: serve una porta aperta sul router.
+
+### 5.1 Nome fisso per l'IP di casa (DDNS)
+
+L'IP pubblico di casa di solito cambia. Un servizio DDNS gratuito dà un nome fisso che segue
+l'IP. Con **FreeDNS** (<https://freedns.afraid.org>, gratuito, senza conferme mensili):
+
+1. Registrati, poi **Subdomains → Add**: tipo `A`, scegli un dominio libero e un nome
+   difficile da indovinare (es. `cam-` più caratteri casuali). Destinazione: il tuo IP attuale.
+2. In **Dynamic DNS** copia il token del tuo record: è la parte dopo il `?` del "Direct URL"
+   (la chiamano "hash").
+3. Nel router, sezione **DDNS**: provider `freedns`, nome dominio = il sottodominio
+   completo, hash = il token. Applica: lo stato deve dire che l'aggiornamento è andato bene.
+
+Controlla che il nome risolva nel tuo IP: `nslookup il-tuo-nome.dominio.com`.
+
+> Se l'IP "WAN" mostrato dal router è diverso dall'IP pubblico che vedi su un sito tipo
+> `ifconfig.me`, sei dietro **CGNAT** e nessun port forwarding potrà funzionare: usa una VPN
+> (Tailscale, WireGuard) tra casa e server, oppure fai girare lo script in casa.
+
+### 5.2 Port forwarding limitato al server
+
+Nel router: **Port Forwarding → nuova regola**.
+
+| Campo | Valore |
+|---|---|
+| Protocollo | TCP |
+| Porta WAN (esterna) | una porta alta a scelta, es. `38554`, non la 554 standard |
+| Host LAN | IP della camera |
+| Porta host LAN | `554` |
+| **IP host remoti** | **l'IP pubblico del tuo server** (stesso valore come inizio e fine intervallo) |
+
+Il campo "IP host remoti" è quello che conta: così la camera non è raggiungibile da nessun
+altro indirizzo di internet. Se il router non lo permette, valuta la VPN.
+
+Poi nel `.env` del server:
+
+```
+CAMERA_HOST=il-tuo-nome.dominio.com
+CAMERA_PORT=38554
+```
+
+### 5.3 Prova dal server
+
+```bash
+bash -c '</dev/tcp/il-tuo-nome.dominio.com/38554' && echo PORTA_APERTA
+.venv/bin/python tapo_uploader.py check
+```
+
+Dall'esterno (per esempio col telefono in 5G) la stessa porta deve risultare **chiusa**.
+
+---
+
+## 6. Verifica finale
+
+```bash
+cd ~/tapo-uploader
+.venv/bin/python tapo_uploader.py test      # registra 60 s e carica, dal server
+sudo systemctl start tapo-uploader
+systemctl status tapo-uploader              # deve essere "active (running)"
+journalctl -u tapo-uploader -f              # log in tempo reale
+ls -la recordings                           # il segmento in corso
+```
+
+Ricorda il limite di una sessione per stream: lancia `check` e `test` **prima** di avviare il
+servizio, oppure con `CAMERA_STREAM=stream2`.
+
+Il primo upload automatico avviene dopo la chiusura del primo segmento (alla prossima ora
+00, 06, 12 o 18) e il file sparisce da `recordings/`. Su YouTube trovi il video privato e la
+playlist del giorno. **Le playlist private non compaiono nella pagina pubblica del tuo
+canale**: cercale in **YouTube → Tu → Playlist** oppure in
+Studio → Contenuti → Playlist.
+
+---
+
+## Uso quotidiano
+
+```bash
+sudo systemctl status tapo-uploader       # stato
+journalctl -u tapo-uploader -f            # log
+sudo systemctl restart tapo-uploader      # dopo aver cambiato .env o lo script
+sudo systemctl stop tapo-uploader         # fermarlo
+ls -la ~/tapo-uploader/recordings         # segmenti in attesa o in registrazione
+```
+
+- Un riavvio chiude il segmento corrente e ne apre uno nuovo, quindi viene caricato anche un
+  video più breve.
+- I segmenti sono MP4 "frammentati": restano riproducibili anche se ffmpeg viene
+  interrotto di colpo (riavvio, spegnimento). Al massimo si perdono gli ultimi secondi.
+
+---
+
+## Configurazione
+
+File `.env` (da `.env.example`, **mai** nel repository):
+
+| Variabile | Significato |
+|---|---|
+| `CAMERA_USER`, `CAMERA_PASS` | Account camera creato nell'app Tapo (non l'account cloud). |
+| `CAMERA_HOST`, `CAMERA_PORT` | In LAN l'IP della camera e `554`. Da remoto nome DDNS e porta esterna. |
+| `CAMERA_STREAM` | `stream1` (alta qualità) o `stream2` (bassa). |
+| `SEGMENT_SECONDS` | Durata di ogni file, default `21600` (6 ore). |
+| `RECORD_DIR` | Cartella dei file in attesa di upload, default `recordings`. |
+| `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_TOKEN` | Nomi dei file `client_secret.json` e `token.json`. |
+| `YOUTUBE_PRIVACY` | `private` (default), `unlisted` o `public`. |
+| `PLAYLIST_PREFIX` | Prefisso di titoli e playlist (default `Tapo`). |
+
+---
+
+## Come funziona
+
+- **Segmenti allineati all'orologio.** `-segment_atclocktime 1` taglia a 00/06/12/18; il taglio
+  avviene al primo keyframe successivo, quindi le durate variano di qualche secondo.
+- **Timestamp.** La camera manda pacchetti H.264 senza timestamp validi: ffmpeg usa
+  `-use_wallclock_as_timestamps 1 -fflags +genpts`.
+- **Audio.** L'audio della camera è PCM A-law, che l'MP4 non accetta: viene convertito in AAC
+  (64 kbit/s, mono). Il video non viene toccato.
+- **MP4 frammentato.** `movflags=+frag_keyframe+empty_moov+default_base_moof`. Un MP4 normale
+  scrive l'indice (`moov`) solo alla fine: se ffmpeg viene ucciso il file resta illeggibile.
+  Con la frammentazione ogni pezzo è già completo.
+- **Titolo.** L'inizio viene dal nome del file, la fine dall'ultima scrittura: corretto anche
+  per i segmenti parziali.
+- **Upload.** Ripartibile a blocchi da 8 MB. Si carica solo ciò che è fermo da più di 2 minuti.
+  Se la quota YouTube è finita, aspetta un'ora.
+- **Playlist.** Si cerca per titolo tra le tue; se manca viene creata. L'ID è in `state.json`.
+- **Log puliti.** Le credenziali della camera vengono sempre mascherate (`rtsp://***@...`),
+  perché ffmpeg stampa l'URL completo negli errori. ffmpeg logga solo gli errori.
+
+---
+
+## Quota YouTube
+
+Ogni upload costa circa 1.650 unità (1.600 il video, 50 l'inserimento in playlist) e la
+quota giornaliera di default è **10.000**: circa **6 video al giorno**.
+
+| Durata segmento | Upload al giorno | Rientra nella quota? |
+|---|---|---|
+| 6 ore (default) | 4 | sì |
+| 4 ore | 6 | al limite |
+| 1 ora | 24 | no, serve richiedere un aumento a Google |
+
+Se la quota finisce lo script lo scrive nel log e riprova dopo un'ora. La quota si azzera a
+mezzanotte, ora del Pacifico.
+
+---
+
+## Sicurezza
+
+- Non pubblicare mai `.env`, `client_secret.json`, `token.json`. Il `.gitignore` li esclude.
+- `token.json` dà accesso al tuo canale YouTube: permessi `600`. Se si perde, revoca
+  l'accesso da <https://myaccount.google.com/permissions>.
+- Limita il port forwarding all'IP del server e usa una porta esterna non standard.
+- Usa password **diverse** per camera, account Tapo e server. Non riutilizzarle e non
+  scriverle in chat o nei ticket.
+- Se l'IP del server cambia, aggiorna la regola del router.
+
+---
+
+## Problemi comuni
+
+| Sintomo | Causa e rimedio |
+|---|---|
+| `401 Unauthorized` | Utente o password dell'**account camera** sbagliati (non quelli del cloud Tapo). |
+| `Operation not permitted` | Un'altra sessione sta già usando quello stream: ferma il servizio o usa `stream2`. |
+| Timeout dal server | Port forwarding assente, IP del server cambiato, IP di casa cambiato e DDNS non aggiornato, oppure CGNAT. |
+| `ensurepip is not available` creando il venv | Manca `python3-venv`: `sudo apt-get install python3-venv`. |
+| `invalid_grant` su YouTube | Token scaduto o revocato (tipico se l'app era in Test): `auth` di nuovo e ricopia `token.json`. |
+| Il pulsante "Pubblica app" è grigio | Mancano home page, privacy policy o dominio autorizzato in Branding. |
+| `moov atom not found` su un file | Segmento scritto con una versione senza MP4 frammentato e interrotto: irrecuperabile, eliminalo. |
+| Playlist col giorno sbagliato o tagli all'una | Il processo gira in UTC: manca `TZ` nel servizio. |
+| Non vedo la playlist nel mio canale | È privata: cercala in YouTube → Tu → Playlist, non nella pagina pubblica del canale. |
+| Nessun upload dopo ore | Il segmento non è ancora chiuso: guarda `recordings/` e `journalctl -u tapo-uploader`. |
+| `quotaExceeded` | Troppi upload per la quota giornaliera: aumenta la durata dei segmenti. |
+
+---
+
+## Licenza
+
+MIT, vedi [LICENSE](LICENSE).
