@@ -74,6 +74,10 @@ def make_storage(kind, config, ctx, host_check=None):
     if kind == "local":
         from .local import LocalStorage
         return LocalStorage(Path(config["root"]), prefix)
+    if kind == "webdav":
+        from .webdav import WebDAVStorage
+        return WebDAVStorage(config.get("url", ""), config.get("user", ""), config.get("password", ""), prefix,
+                             config.get("folder", ""), host_check)
     if kind == "youtube":
         from .youtube import YouTubeStorage
         return YouTubeStorage(ctx, config.get("state"))
