@@ -21,7 +21,7 @@ default, and when accounts are enabled each account may override it. The pipelin
 ## Non-goals / anti-goals
 
 - No uploading to several destinations at once for the same camera (one destination per account/server).
-- The server never serves or transcodes footage; it only links to where the footage is.
+- No transcoding of video. The server may stream a file to its owner's browser (see the player), nothing more.
 - No native Mega client: Mega has no official Python SDK, so Mega goes through rclone (its `mega` backend).
 - Anti-goal: a friend must never be able to make the server run arbitrary commands, read its files, or reach
   its private network by choosing a destination.
@@ -29,7 +29,7 @@ default, and when accounts are enabled each account may override it. The pipelin
 ## Decisions (made by the author of this document, not yet confirmed by the user)
 
 1. **Interface** (`tapo_storage/base.py`): `Storage` with `check() -> None` (raises with a readable message),
-   `put(path, day, name, description) -> StoredItem`, `list_day(day) -> list[StoredItem]` (optional,
+   `put(path, day, name, description) -> StoredItem`, `list_day(day) -> list[StoredItem]` and `open(item, start, end) -> iterator of bytes` (both optional,
    `browsable = False` by default). `StoredItem` = name, size, url-or-None, when. A factory
    `make_storage(kind, config, ctx)` builds one.
 2. **Layout** on file-like destinations: `<prefix> YYYY-MM-DD/<name>.mp4`, mirroring the YouTube playlist
@@ -50,9 +50,15 @@ default, and when accounts are enabled each account may override it. The pipelin
    `Vault`. YouTube keeps its own OAuth link table; choosing `youtube` just means "use the link". Schema
    migration bumps `schema_version`.
 9. **Quota:** only YouTube goes through `QuotaLedger`/`UploadGate`/stagger. Other kinds bypass the gate.
-10. **Personal page:** browsable destinations (YouTube, WebDAV) show the day list as today (WebDAV: names, sizes and
-    a link to the file in the user's own cloud, which needs their own login there). Non-browsable ones (local,
-    rclone) show only status and last upload.
+10. **Player on the personal page.** YouTube: embedded `youtube-nocookie.com` iframe; the CSP gains
+    `frame-src https://www.youtube-nocookie.com` and nothing else. WebDAV, local, rclone: a `<video>` tag pointing at
+    `/media/<camera_id>/<item_id>`, served by the app with HTTP Range support (WebDAV: forward the Range request with
+    the vault credentials; local: `send_file` conditional; rclone: `rclone cat --offset/--count`). The CSP gains
+    `media-src 'self'`. Every request checks the session and that the camera belongs to the user (admins excepted);
+    item ids are database/listing ids, never paths. All four kinds are therefore browsable.
+10b. **Audio for browsers.** Tapo audio is often G.711, which browsers do not play. For non-YouTube destinations the
+    uploader remuxes with `-c:v copy -c:a aac` when the file has a non-AAC audio track (first test of the plan:
+    check the codec of real files). YouTube keeps receiving the file untouched.
 11. **Failure behaviour** is the same as today: a failed upload keeps the clip, reports status, retries with
     backoff; a wrong setting is caught earlier by the "Test" button calling `check()`.
 12. **Single-user env:** `STORAGE`, `WEBDAV_URL`, `WEBDAV_USER`, `WEBDAV_PASS`, `LOCAL_ROOT`, `RCLONE_REMOTE`,
@@ -75,6 +81,9 @@ write access (create and remove a probe file), test fakes for each backend, READ
 - Admin removes a kind from `STORAGE_ALLOWED` while users have it saved: they fall back to the server default,
   with a visible notice.
 - rclone not installed / remote missing: clear error in the UI, not a crash loop.
+- `/media` with `../`, another user's ids, a huge or invalid Range header, or a WebDAV file that vanished: 403/404/416, no
+  traversal, no server-side buffering of the whole file.
+- Video with no audio, or audio the browser cannot decode: still plays, and the page says so instead of failing silently.
 
 ## Rollout
 
