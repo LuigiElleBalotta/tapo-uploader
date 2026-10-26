@@ -3,6 +3,7 @@
 Single-user mode builds it from `.env` (`CameraContext.from_env`); the multi-account web app builds
 one per camera from the database. The recording, ONVIF and upload code only ever sees this object.
 """
+import dataclasses
 import os
 import sys
 from dataclasses import dataclass
@@ -97,7 +98,7 @@ class CameraContext:
     @classmethod
     def from_env(cls):
         host = _env("CAMERA_HOST")
-        return cls(
+        ctx = cls(
             name="camera",
             host=host,
             port=int(_env("CAMERA_PORT", "554")),
@@ -121,3 +122,6 @@ class CameraContext:
             buffer_name=_env("BUFFER_DIR", "buffer"),
             events_name=_env("EVENTS_DIR", "events"),
         )
+        from tapo_storage.base import storage_from_env  # STORAGE in .env; unset means YouTube
+        storage = storage_from_env(os.environ, ctx)
+        return dataclasses.replace(ctx, storage=storage) if storage else ctx

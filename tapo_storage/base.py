@@ -84,3 +84,31 @@ def make_storage(kind, config, ctx, host_check=None):
         from .youtube import YouTubeStorage
         return YouTubeStorage(ctx, config.get("state"))
     raise StorageError(f"unknown storage kind '{kind}'")
+
+
+def storage_from_env(environ, ctx):
+    """Single-user mode: the destination named by STORAGE in .env. None means YouTube, as it always was."""
+    kind = (environ.get("STORAGE") or "youtube").strip().lower()
+    if kind == "youtube":
+        return None
+
+    def need(name):
+        value = environ.get(name)
+        if not value:
+            raise SystemExit(f"Missing {name} in .env (needed by STORAGE={kind})")
+        return value
+
+    if kind == "webdav":
+        config = {"url": need("WEBDAV_URL"), "user": environ.get("WEBDAV_USER", ""),
+                  "password": environ.get("WEBDAV_PASS", ""), "folder": environ.get("WEBDAV_FOLDER", "")}
+    elif kind == "local":
+        config = {"root": need("LOCAL_ROOT")}
+    elif kind == "rclone":
+        config = {"remote": need("RCLONE_REMOTE"), "config": environ.get("RCLONE_CONFIG", ""),
+                  "folder": environ.get("RCLONE_FOLDER", "")}
+    else:
+        raise SystemExit(f"Unknown STORAGE '{kind}' in .env (use youtube, webdav, local or rclone)")
+    try:
+        return make_storage(kind, config, ctx)
+    except StorageError as err:
+        raise SystemExit(f"{kind.upper()} settings in .env: {err}") from err
