@@ -345,8 +345,32 @@ def cmd_upload():
     upload_pending(base.load_state(), force=True)
 
 
+def health_server(port):
+    """Answer GET anything with 200 OK. Free web services of Render sleep after 15 minutes without
+    inbound HTTP traffic: an external pinger (UptimeRobot, cron-job.org) hitting this keeps it awake."""
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            body = b"ok\n"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):  # a ping every few minutes would flood the log
+            pass
+
+    server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    log.info("health endpoint on port %d", port)
+
+
 def cmd_run():
     base.youtube_client()  # fail fast if not authorised
+    if os.getenv("PORT"):  # set by web-service hosts (Render): they need something listening
+        health_server(int(os.environ["PORT"]))
     BUFFER_DIR.mkdir(exist_ok=True)
     EVENTS_DIR.mkdir(exist_ok=True)
     for _, path in segments():

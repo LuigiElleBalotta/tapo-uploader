@@ -11,6 +11,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY tapo_uploader.py tapo_motion.py ./
+RUN mkdir -p /data
 
 # DATA_DIR must be a persistent volume: it holds the token, the state and the clips waiting for the upload
 ENV DATA_DIR=/data \

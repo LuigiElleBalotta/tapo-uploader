@@ -184,6 +184,7 @@ dalla più semplice:
 | **Raspberry Pi / mini PC in casa** | una tantum, 15–50 € | in LAN | **Consigliato**: niente port forwarding, niente DDNS, niente IP da proteggere. |
 | **VPS** (come in questa guida) | pochi euro al mese | port forwarding limitato all'IP fisso del VPS | Passi 4 e 5. È la configurazione collaudata. |
 | **Render** (Background Worker) | da circa 7 $/mese, più 0,25 $/GB di disco | port forwarding verso gli IP condivisi di Render | Immagine Docker inclusa, **non collaudata**. Vedi sotto. |
+| **Render gratuito** (web service) | 0 € | port forwarding verso gli IP condivisi di Render | `render.free.yaml`, **non collaudato**. Disco effimero: si possono perdere clip. Vedi sotto. |
 | **Vercel** | – | – | **Non adatto.** Vedi sotto. |
 
 Le altre piattaforme con container (Fly.io, Railway) seguono lo stesso schema di Render: il
@@ -222,6 +223,53 @@ Passi: collega il repository a Render (**New → Blueprint**), compila le variab
 Render e guarda i log del worker. Render chiede le variabili solo alla creazione del Blueprint:
 cambiarle dopo si fa dal pannello. Per la registrazione continua invece di quella a movimento
 decommenta `dockerCommand` nel `render.yaml`.
+
+### Render gratuito (senza VPS)
+
+Per chi non ha un server. Il **VPS resta la scelta principale**: questa è un'alternativa a costo
+zero, con limiti precisi. Usa `render.free.yaml` (un *web service* sul piano `free`) e **non è
+stata collaudata su Render**.
+
+Come funziona: il programma apre una piccola porta HTTP (`/health`, attiva quando Render imposta
+`PORT`) e un servizio di monitoraggio gratuito (UptimeRobot, cron-job.org) la chiama ogni 5
+minuti. Per la [documentazione di Render](https://render.com/docs/free) un servizio gratuito
+dorme dopo 15 minuti **senza traffico in entrata**; il traffico in uscita non conta, quindi serve
+una chiamata dall'esterno. Le 750 ore gratuite al mese bastano per un solo servizio sempre acceso.
+
+Passi: **New → Blueprint**, scegli il repository e indica `render.free.yaml`; compila le variabili
+(come per il worker); crea il monitor su `https://NOME.onrender.com/health` ogni 5 minuti.
+
+**Limiti e rischi, da leggere prima:**
+
+| Limite | Conseguenza |
+|---|---|
+| Il disco si azzera a ogni riavvio, deploy o spin-down | I clip della giornata non ancora caricati si **perdono**. Render può riavviare il servizio in qualsiasi momento. |
+| Se il servizio dorme (monitor fermo, ore finite) | Nessuna registrazione finché non si risveglia (circa un minuto dopo la prima richiesta). |
+| Ore gratuite esaurite | Tutti i servizi gratuiti si sospendono fino al mese dopo. Con un solo servizio e il monitor non succede, con due sì. |
+| Render può sospendere i servizi gratuiti con traffico in uscita molto alto | Qui il traffico è di pochi MB al giorno, ma le regole possono cambiare. |
+| Il token YouTube rinnovato non viene salvato | Il token arriva da `YOUTUBE_TOKEN_JSON`; a ogni riavvio si riparte da quello. Funziona finché non viene revocato. |
+| RAM e CPU non documentate per il piano gratuito | Non misurate: ffmpeg in `-c copy` è leggero, ma non è verificato. |
+| Il monitor esterno è un'altra dipendenza | Se il servizio di monitoraggio cambia le sue regole, il servizio dorme. |
+| **IP di Render condivisi e non fissi** | Vedi sotto: è il rischio più serio. |
+
+**Il rischio più serio è la sicurezza della camera.** Gli IP in uscita di Render sono condivisi da
+tutti i servizi della regione e non sono nella documentazione: li trovi nel pannello del servizio,
+**Connect → Outbound**. Hai due strade, entrambe con un prezzo:
+
+1. **Regole nel router per ogni intervallo** (consigliata). Una regola di port forwarding per
+   intervallo e per porta, con origine limitata a quell'intervallo. Anche così resti esposto a
+   chiunque usi lo stesso intervallo su Render, e gli intervalli possono cambiare: ricontrolla di
+   tanto in tanto. Non ho verificato che il tuo router accetti più regole sulla stessa porta
+   esterna con origini diverse; se non lo fa, usa porte esterne diverse per ogni regola.
+2. **Porte aperte a tutti.** Solo la password protegge la camera: usa una password **lunga e
+   unica** (mai quella di altri account), una porta esterna non standard, e tieni d'occhio i
+   tentativi di accesso. Sconsigliato.
+
+Se la connessione alla camera cade, lo script riprova da solo con attesa crescente: si perde solo
+quel tratto. Se invece cambia il tuo IP di casa, il nome DDNS (passo 5.1) segue l'aggiornamento.
+
+Per avere gli stessi risultati del VPS senza questi limiti servono un disco persistente (a
+pagamento, vedi sopra) o un Raspberry in casa.
 
 ### Vercel
 

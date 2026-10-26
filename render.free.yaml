@@ -1,0 +1,36 @@
+# Render Blueprint for the FREE plan: a web service kept awake by an external pinger.
+# NOT TESTED on Render by the author. Read "Render gratuito" in README.md first: the disk is
+# erased on every restart, so the clips not yet uploaded can be lost.
+#
+# New > Blueprint > pick this repository, and set the file path to render.free.yaml.
+# Then create a free monitor (UptimeRobot, cron-job.org) that calls https://<service>.onrender.com/health
+# every 5 minutes: outbound traffic does not count, only inbound HTTP keeps the service awake.
+services:
+  - type: web
+    name: tapo-uploader-free
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: DATA_DIR
+        value: /data              # ephemeral on the free plan
+      - key: TZ
+        value: Europe/Rome
+      - key: CAMERA_STREAM
+        value: stream1
+      - key: CAMERA_USER
+        sync: false
+      - key: CAMERA_PASS
+        sync: false
+      - key: CAMERA_HOST
+        sync: false
+      - key: CAMERA_PORT
+        sync: false
+      - key: ONVIF_HOST
+        sync: false
+      - key: ONVIF_PORT
+        sync: false
+      - key: YOUTUBE_TOKEN_JSON
+        sync: false
+      - key: YOUTUBE_CLIENT_SECRET_JSON
+        sync: false
