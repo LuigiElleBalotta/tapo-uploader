@@ -113,3 +113,13 @@ def test_update_user_profile(db):
     db.update_user_profile(uid, "New Name", "admin")
     user = db.user_by_id(uid)
     assert user["display_name"] == "New Name" and user["role"] == "admin"
+
+
+def test_update_youtube_token_keeps_link_data(db):
+    uid = db.add_user("local", "a", "A", "user")
+    db.save_youtube_link(uid, "enc-1", "My channel", "own", "enc-secret")
+    linked = db.youtube_link(uid)["linked_at"]
+    db.update_youtube_token(uid, "enc-2")
+    link = db.youtube_link(uid)
+    assert (link["token_enc"], link["channel_title"], link["client_source"]) == ("enc-2", "My channel", "own")
+    assert link["client_secret_enc"] == "enc-secret" and link["linked_at"] == linked

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}YouTube · tapo-uploader{% endblock %}
+{% block content %}
+<h1 class="h3">Your YouTube channel</h1>
+{% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
+<div class="card app-card">
+  {% if link %}
+    <p><span class="mi" aria-hidden="true">check_circle</span> Linked to <strong>{{ link.channel_title }}</strong>
+      {% if link.client_source == 'own' %}<span class="text-muted">(with your own Google project)</span>{% endif %}</p>
+    <p class="text-muted">Videos are uploaded to this channel as private, one playlist per day.</p>
+    <form method="post" action="{{ url_for('youtube_disconnect') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-neutral btn-round" type="submit">Disconnect</button>
+    </form>
+  {% else %}
+    <p>No channel linked yet. Videos go to <strong>your</strong> YouTube channel, never anyone else's.</p>
+    <form method="post" action="{{ url_for('youtube_connect') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% if allow_own %}
+      <div class="form-group">
+        <label for="client_json">Your own Google client JSON (optional)</label>
+        <textarea class="form-control" id="client_json" name="client_json" rows="4" placeholder="Leave empty to use the server's Google project"></textarea>
+      </div>
+      {% endif %}
+      <button class="btn btn-primary btn-round" type="submit">Connect YouTube</button>
+    </form>
+  {% endif %}
+</div>
+{% endblock %}

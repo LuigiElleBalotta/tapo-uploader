@@ -170,6 +170,9 @@ class Database:
                   "client_secret_enc = excluded.client_secret_enc, linked_at = excluded.linked_at",
                   (user_id, token_enc, channel_title, client_source, client_secret_enc, time.time()))
 
+    def update_youtube_token(self, user_id, token_enc):
+        self._run("UPDATE youtube_links SET token_enc = ? WHERE user_id = ?", (token_enc, user_id))
+
     def youtube_link(self, user_id):
         return self._one("SELECT * FROM youtube_links WHERE user_id = ?", (user_id,))
 

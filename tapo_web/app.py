@@ -77,7 +77,7 @@ def create_app(settings: Settings, db: Database = None):
             return view(*args, **kwargs)
         return wrapper
 
-    app.login_required, app.admin_required = login_required, admin_required
+    app.login_required, app.admin_required, app.current_user = login_required, admin_required, current_user
 
     def safe_next(target):
         """Only a path on this site: never send someone to another host after login."""
@@ -136,5 +136,7 @@ def create_app(settings: Settings, db: Database = None):
 
     from .auth_nextcloud import register as register_nextcloud
     register_nextcloud(app)
+    from .youtube_link import register as register_youtube
+    register_youtube(app)
 
     return app
