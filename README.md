@@ -184,7 +184,7 @@ dalla più semplice:
 | **Raspberry Pi / mini PC in casa** | una tantum, 15–50 € | in LAN | **Consigliato**: niente port forwarding, niente DDNS, niente IP da proteggere. |
 | **VPS** (come in questa guida) | pochi euro al mese | port forwarding limitato all'IP fisso del VPS | Passi 4 e 5. È la configurazione collaudata. |
 | **Render** (Background Worker) | da circa 7 $/mese, più 0,25 $/GB di disco | port forwarding verso gli IP condivisi di Render | Immagine Docker inclusa, **non collaudata**. Vedi sotto. |
-| **Render gratuito** (web service) | 0 € | port forwarding verso gli IP condivisi di Render | `render.free.yaml`, **non collaudato**. Disco effimero: si possono perdere clip. Vedi sotto. |
+| **Render gratuito** (web service) | 0 € | port forwarding verso gli IP condivisi di Render | Collaudato fino all'avvio, non con la camera. Disco effimero: si possono perdere clip. Vedi sotto. |
 | **Vercel** | – | – | **Non adatto.** Vedi sotto. |
 
 Le altre piattaforme con container (Fly.io, Railway) seguono lo stesso schema di Render: il
@@ -227,8 +227,10 @@ decommenta `dockerCommand` nel `render.yaml`.
 ### Render gratuito (senza VPS)
 
 Per chi non ha un server. Il **VPS resta la scelta principale**: questa è un'alternativa a costo
-zero, con limiti precisi. Usa `render.free.yaml` (un *web service* sul piano `free`) e **non è
-stata collaudata su Render**.
+zero, con limiti precisi. Il deploy come *web service* sul piano `free` è stato provato su Render
+fino all'avvio (build, `health endpoint on port 10000`, `ffmpeg start`); **la registrazione dalla
+camera tramite Render non è stata verificata**, perché richiede le regole del router descritte
+sotto.
 
 Come funziona: il programma apre una piccola porta HTTP (`/health`, attiva quando Render imposta
 `PORT`) e un servizio di monitoraggio gratuito (UptimeRobot, cron-job.org) la chiama ogni 5
@@ -236,8 +238,46 @@ minuti. Per la [documentazione di Render](https://render.com/docs/free) un servi
 dorme dopo 15 minuti **senza traffico in entrata**; il traffico in uscita non conta, quindi serve
 una chiamata dall'esterno. Le 750 ore gratuite al mese bastano per un solo servizio sempre acceso.
 
-Passi: **New → Blueprint**, scegli il repository e indica `render.free.yaml`; compila le variabili
-(come per il worker); crea il monitor su `https://NOME.onrender.com/health` ogni 5 minuti.
+**Passi (quelli fatti davvero, dal pannello):**
+
+1. Su [dashboard.render.com](https://dashboard.render.com) fai **New → Web Service**, scheda
+   **Public Git Repository**, incolla l'URL del repository e premi **Connect**. Render riconosce il
+   `Dockerfile` da solo.
+2. In **Compute** scegli la riga **$0 / month (0,1 CPU, 512 MB)**. Il piano preselezionato è quello
+   da 7 $/mese: se lo lasci, paghi.
+3. In **Environment Variables** premi **Add from .env** e incolla le righe qui sotto con i tuoi
+   valori. Il token e il client secret vanno su **una sola riga**, come JSON compatto
+   (`python -c "import json;print(json.dumps(json.load(open('token.json')),separators=(',',':')))"`).
+   ```
+   CAMERA_USER=...
+   CAMERA_PASS=...
+   CAMERA_HOST=il-tuo-nome-ddns.example.com
+   CAMERA_PORT=porta esterna RTSP
+   ONVIF_HOST=il-tuo-nome-ddns.example.com
+   ONVIF_PORT=porta esterna ONVIF
+   CAMERA_STREAM=stream1
+   DATA_DIR=/data
+   TZ=Europe/Rome
+   YOUTUBE_TOKEN_JSON=...
+   YOUTUBE_CLIENT_SECRET_JSON=...
+   ```
+4. **Deploy web service**. La build dura circa un minuto e mezzo. Nei log devi vedere
+   `health endpoint on port 10000` e `ffmpeg start`. L'avviso `file_cache is only supported with
+   oauth2client<4.0.0` è innocuo.
+5. Dalla pagina del servizio prendi l'URL (`https://NOME.onrender.com`) e, con il pulsante
+   **Connect → Outbound**, gli intervalli IP da dare al router (nel mio caso `74.220.51.0/24` e
+   `74.220.59.0/24`: i tuoi dipendono dalla regione e possono essere diversi).
+6. Crea sul router le regole per le due porte della camera, una per intervallo (vedi sotto).
+7. Crea il monitor (UptimeRobot, cron-job.org) su `https://NOME.onrender.com/health` ogni 5 minuti.
+
+**Se già usi un VPS con questa camera:** la camera accetta una sola sessione RTSP per stream. Se
+VPS e Render registrano entrambi su `stream1`, il secondo che si collega riceve
+`Operation not permitted`. Fai girare un solo servizio per stream, oppure imposta
+`CAMERA_STREAM=stream2` su Render.
+
+Il Blueprint `render.free.yaml` non l'ho provato: aprendo il Blueprint con il `render.yaml` di
+default (worker da 7 $/mese) Render chiede una carta di pagamento. Il web service creato a mano,
+come sopra, non l'ha chiesta.
 
 **Limiti e rischi, da leggere prima:**
 
