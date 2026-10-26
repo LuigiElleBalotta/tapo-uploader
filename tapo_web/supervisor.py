@@ -4,6 +4,7 @@
 growing delay). A camera's address is resolved and checked every time its worker is (re)started, and the
 worker connects to that checked IP. `maintenance()` applies the retention rules.
 """
+import dataclasses
 import logging
 import shutil
 import socket
@@ -13,6 +14,7 @@ from datetime import datetime
 
 from .cameras import camera_data_dir, safe_context
 from .crypto import VaultError
+from .quota import QuotaLedger, UploadGate, stagger_slots
 from .security import UnsafeHost
 from .youtube_link import LinkRevoked, youtube_for_user
 
@@ -70,6 +72,7 @@ class Supervisor:
             worker_factory = CameraWorker
         self.db, self.vault, self.settings = db, vault, settings
         self.worker_factory, self.clock, self.resolver = worker_factory, clock, resolver
+        self.ledger = QuotaLedger(db, settings.quota_daily)
         self.running = {}   # camera id -> {"worker", "signature"}
         self.backoff = {}   # camera id -> {"failures", "not_before"}
         self.lock = threading.RLock()
@@ -86,7 +89,7 @@ class Supervisor:
             return client
         return factory
 
-    def _start(self, camera):
+    def _start(self, camera, slot):
         cid = camera["id"]
         try:
             ctx = safe_context(camera, self.vault, self.settings, youtube=self._youtube_factory(camera["user_id"]),
@@ -97,11 +100,13 @@ class Supervisor:
         except VaultError:
             self._problem(camera, "error", "The stored camera credentials cannot be read.")
             return
+        ctx = dataclasses.replace(ctx, upload_at=slot)  # each camera uploads in its own time slot
         ctx.ensure_dirs()
         import tapo_motion
         for _, path in tapo_motion.segments(ctx):
             path.unlink(missing_ok=True)  # leftovers of a previous run
-        worker = self.worker_factory(ctx, lambda kind, detail="", cid=cid: self._on_status(cid, kind, detail))
+        gate = UploadGate(self.ledger, cid, slot)
+        worker = self.worker_factory(ctx, lambda kind, detail="", cid=cid: self._on_status(cid, kind, detail), gate=gate)
         worker.start()
         self.running[cid] = {"worker": worker, "signature": _signature(camera)}
         log.info("camera %s: worker started", cid)
@@ -129,13 +134,14 @@ class Supervisor:
                     self.backoff[cid] = {"failures": failures,
                                          "not_before": self.clock() + min(300, 5 * 2 ** failures)}
                     log.warning("camera %s: worker died, restart in %ss", cid, min(300, 5 * 2 ** failures))
+            slots = stagger_slots(list(wanted), self.settings.upload_at, self.settings.upload_stagger_minutes)
             for cid, camera in wanted.items():
                 if cid in self.running:
                     continue
                 wait = self.backoff.get(cid)
                 if wait and self.clock() < wait["not_before"]:
                     continue
-                self._start(camera)
+                self._start(camera, slots[cid])
 
     def _mark_stopped(self, camera_id):
         if self.db.camera_by_id(camera_id):

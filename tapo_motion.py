@@ -300,24 +300,32 @@ def upload_day(ctx, yt, state, day_dir, report=_ignore):
         pass
 
 
-def upload_pending(ctx, state, force=False, report=_ignore):
+def upload_pending(ctx, state, force=False, report=_ignore, gate=None):
+    """Upload the days that are due. A `gate` (multi-account mode) keeps the shared YouTube quota: it says when
+    this camera may upload and is charged after every upload."""
     days = list(due_days(ctx, force))
-    if not days:
+    if not days or (gate and not gate.allowed()):
         return
     yt = base.youtube_client(ctx)
     for day_dir in days:
+        if gate and not gate.allowed():
+            return
         upload_day(ctx, yt, state, day_dir, report)
+        if gate:
+            gate.charge()
 
 
-def daily_loop(ctx, stop, report=_ignore):
+def daily_loop(ctx, stop, report=_ignore, gate=None):
     state = base.load_state(ctx)
     while not stop.is_set():
         try:
-            upload_pending(ctx, state, report=report)
+            upload_pending(ctx, state, report=report, gate=gate)
         except HttpError as err:
             if base.is_quota_error(err):
                 log.error("YouTube quota exceeded, sleeping 1h")
                 report("error", "YouTube quota exceeded")
+                if gate:
+                    gate.exhausted()  # Google says it is gone: the other cameras stop trying today too
                 stop.wait(3600)
                 continue
             log.exception("YouTube error")

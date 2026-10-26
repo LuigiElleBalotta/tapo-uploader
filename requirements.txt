@@ -5,3 +5,4 @@ Flask>=3.0
 cryptography>=42
 waitress>=3.0
 requests>=2.31
+tzdata>=2024.1

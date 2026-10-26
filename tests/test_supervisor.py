@@ -14,8 +14,8 @@ NOW = datetime(2026, 11, 1, 12, 0, 0)
 class FakeWorker:
     instances = []
 
-    def __init__(self, ctx, on_status):
-        self.ctx, self.on_status = ctx, on_status
+    def __init__(self, ctx, on_status, gate=None):
+        self.ctx, self.on_status, self.gate = ctx, on_status, gate
         self.started = self.stopped = False
         self.alive_flag = True
         FakeWorker.instances.append(self)
@@ -239,3 +239,13 @@ def test_maintenance_discards_clips_only_for_unlinked_users(tmp_path):
     by_owner = {w.ctx.name: w.ctx.events_dir / "20200101" / "100000.mp4" for w in FakeWorker.instances}
     assert by_owner[f"camera-{linked_cam}"].exists()
     assert not by_owner[f"camera-{unlinked_cam}"].exists()
+
+
+def test_uploads_are_staggered_and_gated(tmp_path):
+    from datetime import time
+    env = make(tmp_path, upload_stagger_minutes=10)
+    first, second = add_camera(env, env.alice, "a"), add_camera(env, env.bob, "b")
+    env.sup.sync()
+    slots = {w.ctx.name: w.ctx.upload_at for w in FakeWorker.instances}
+    assert slots == {f"camera-{first}": time(21, 0), f"camera-{second}": time(21, 10)}
+    assert all(w.gate is not None and w.gate.slot == w.ctx.upload_at for w in FakeWorker.instances)

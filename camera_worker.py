@@ -11,9 +11,10 @@ import tapo_uploader as base
 
 
 class CameraWorker:
-    def __init__(self, ctx, on_status):
+    def __init__(self, ctx, on_status, gate=None):
         self.ctx = ctx
         self.on_status = on_status
+        self.gate = gate
         self.stop_event = threading.Event()
         self.threads = []
 
@@ -31,7 +32,7 @@ class CameraWorker:
             (base.record_loop, (ctx, ctx.buffer_dir, ctx.segment, stop)),
             (tapo_motion.onvif_loop, (ctx, events, stop, report)),
             (tapo_motion.controller, (ctx, events, stop, report)),
-            (tapo_motion.daily_loop, (ctx, stop, report)),
+            (tapo_motion.daily_loop, (ctx, stop, report, self.gate)),
         ]
         self.threads = [threading.Thread(target=self._guard(target), args=args, daemon=True,
                                          name=f"{ctx.name}-{target.__name__}")
