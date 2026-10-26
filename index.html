@@ -2,17 +2,208 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>tapo-uploader</title>
-  <style>
-    body { font: 16px/1.6 system-ui, sans-serif; max-width: 42rem; margin: 3rem auto; padding: 0 1rem; color: #222; }
-    a { color: #0b57d0; }
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <title>tapo-uploader: record a Tapo camera on motion and upload to private YouTube</title>
+  <meta name="description" content="Open-source Python tool: records a TP-Link Tapo camera (tested on the Tapo C200) only on motion with ffmpeg and ONVIF, and uploads private videos to your own YouTube channel, one playlist per day. No cloud subscription. Runs on a Raspberry Pi, VPS or Docker.">
+  <meta name="keywords" content="Tapo C200, Tapo camera, YouTube upload, motion detection, ONVIF, RTSP, ffmpeg, private YouTube video, Raspberry Pi, self-hosted, no cloud subscription">
+  <meta name="author" content="Luigi Elle Balotta">
+  <meta name="theme-color" content="#1f1b2e">
+  <link rel="canonical" href="https://luigiellebalotta.github.io/tapo-uploader/">
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="tapo-uploader: Tapo camera to private YouTube, recorded on motion">
+  <meta property="og:description" content="Records your Tapo camera only on motion and uploads one private video a day to your own YouTube channel. Free, open source, no subscription.">
+  <meta property="og:url" content="https://luigiellebalotta.github.io/tapo-uploader/">
+  <meta property="og:image" content="https://luigiellebalotta.github.io/tapo-uploader/assets/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="tapo-uploader: Tapo camera to private YouTube, recorded on motion">
+  <meta name="twitter:description" content="Records your Tapo camera only on motion and uploads one private video a day to your own YouTube channel.">
+  <meta name="twitter:image" content="https://luigiellebalotta.github.io/tapo-uploader/assets/og-image.png">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareSourceCode",
+    "name": "tapo-uploader",
+    "description": "Records a TP-Link Tapo camera on motion with ffmpeg and ONVIF and uploads private videos to the user's own YouTube channel, one playlist per day.",
+    "codeRepository": "https://github.com/LuigiElleBalotta/tapo-uploader",
+    "programmingLanguage": "Python",
+    "license": "https://opensource.org/licenses/MIT",
+    "author": { "@type": "Person", "name": "Luigi Elle Balotta" },
+    "url": "https://luigiellebalotta.github.io/tapo-uploader/"
+  }
+  </script>
+
+  <link rel="stylesheet" href="assets/vendor/now-ui-kit/css/bootstrap.min.css">
+  <link rel="stylesheet" href="assets/vendor/now-ui-kit/css/now-ui-kit.css">
+  <link rel="stylesheet" href="assets/site.css">
 </head>
 <body>
-  <h1>tapo-uploader</h1>
-  <p>A personal tool that records the video stream of the author's own home security camera and uploads the recordings, as private videos, to the author's own YouTube channel.</p>
-  <p>The app is used by a single person and is not offered to other users.</p>
-  <p><a href="privacy.html">Privacy policy</a></p>
+
+  <nav class="navbar navbar-expand-lg fixed-top site-nav" aria-label="Main">
+    <div class="container">
+      <a class="navbar-brand" href="#top">tapo-uploader</a>
+      <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#nav" aria-controls="nav" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-bar bar1"></span><span class="navbar-toggler-bar bar2"></span><span class="navbar-toggler-bar bar3"></span>
+      </button>
+      <div class="collapse navbar-collapse justify-content-end" id="nav">
+        <ul class="navbar-nav">
+          <li class="nav-item"><a class="nav-link" href="#how">How it works</a></li>
+          <li class="nav-item"><a class="nav-link" href="#features">Features</a></li>
+          <li class="nav-item"><a class="nav-link" href="#run">Where to run</a></li>
+          <li class="nav-item"><a class="nav-link" href="#start">Quick start</a></li>
+          <li class="nav-item"><a class="nav-link" href="#faq">FAQ</a></li>
+          <li class="nav-item"><a class="nav-link" href="privacy.html">Privacy</a></li>
+          <li class="nav-item"><a class="btn btn-primary btn-round btn-sm" href="https://github.com/LuigiElleBalotta/tapo-uploader">GitHub</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero" id="top">
+    <div class="container">
+      <div class="row align-items-center">
+        <div class="col-lg-7">
+          <p class="eyebrow">Open source · MIT · Python + ffmpeg</p>
+          <h1>Your Tapo camera, recorded on motion, saved to your own YouTube.</h1>
+          <p class="lead">tapo-uploader records a TP-Link Tapo camera only when it detects motion and uploads the footage as <strong>private YouTube videos</strong>, one playlist per day. No cloud subscription, no firmware hacking, no storage to buy.</p>
+          <p class="cta">
+            <a class="btn btn-primary btn-round btn-lg" href="https://github.com/LuigiElleBalotta/tapo-uploader#readme">Read the guide</a>
+            <a class="btn btn-neutral btn-round btn-lg" href="https://github.com/LuigiElleBalotta/tapo-uploader">View on GitHub</a>
+          </p>
+          <p class="meta">Tested on the Tapo C200 · <a href="https://github.com/LuigiElleBalotta/tapo-uploader/blob/main/README_IT.md">Guida in italiano</a></p>
+        </div>
+        <div class="col-lg-5 d-none d-lg-block">
+          <div class="terminal" role="img" aria-label="Example log of a motion recording and the daily upload">
+            <div class="terminal-bar"><span></span><span></span><span></span></div>
+<pre><code><span class="dim">14:06:02</span> motion: recording from 30s before to 300s after
+<span class="dim">14:11:15</span> clip saved: 34 segments, ends 14:11:07
+<span class="dim">21:00:04</span> joining 5 clips, no re-encoding
+<span class="dim">21:02:41</span> <span class="ok">uploaded</span> Tapo 2026-10-26 eventi 07:12-20:55 (5)
+<span class="dim">21:02:42</span> added to playlist <span class="ok">Tapo 2026-10-26</span>
+<span class="dim">21:02:42</span> local files deleted</code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="section" id="how" aria-labelledby="how-title">
+      <div class="container">
+        <h2 id="how-title">How it works</h2>
+        <p class="section-lead">The camera can't upload by itself, so a small always-on program does it from outside. The camera is never modified.</p>
+        <div class="flow">
+          <div class="flow-step"><span class="mi" aria-hidden="true">videocam</span><h3>Camera</h3><p>Streams over RTSP and announces motion through ONVIF events.</p></div>
+          <span class="mi flow-arrow" aria-hidden="true">arrow_forward</span>
+          <div class="flow-step"><span class="mi" aria-hidden="true">sensors</span><h3>Motion</h3><p>Keeps a short ring buffer: 30 s before the trigger, 5 min after.</p></div>
+          <span class="mi flow-arrow" aria-hidden="true">arrow_forward</span>
+          <div class="flow-step"><span class="mi" aria-hidden="true">cloud_upload</span><h3>Upload</h3><p>Once a day, the clips become one private video on your channel.</p></div>
+          <span class="mi flow-arrow" aria-hidden="true">arrow_forward</span>
+          <div class="flow-step"><span class="mi" aria-hidden="true">playlist_play</span><h3>Playlist</h3><p>One playlist per day, event times as chapters. Files are deleted.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section-alt" id="features" aria-labelledby="features-title">
+      <div class="container">
+        <h2 id="features-title">Everything you need, nothing you don't</h2>
+        <div class="row">
+          <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">sensors</span><h3>Motion-triggered</h3><p>Pre-roll and post-roll are configurable. Late motion extends the window. Person detection counts too.</p></div></div>
+          <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">lock</span><h3>Private by default</h3><p>Videos go to your own channel as <code>private</code>. Switch to unlisted or public with one setting.</p></div></div>
+          <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">memory</span><h3>No re-encoding</h3><p><code>ffmpeg -c copy</code> keeps the CPU near zero, so a Raspberry Pi is plenty.</p></div></div>
+          <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">delete_outline</span><h3>Frees the disk</h3><p>Each file is deleted right after a successful upload. A few GB of space are enough.</p></div></div>
+          <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">verified_user</span><h3>Resilient</h3><p>Restarts ffmpeg when the stream drops, retries uploads, respects the YouTube quota, and never logs your camera password.</p></div></div>
+          <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">schedule</span><h3>Two modes</h3><p>Motion mode uploads one video a day. Continuous mode records 6-hour segments.</p></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="run" aria-labelledby="run-title">
+      <div class="container">
+        <h2 id="run-title">Run it where you like</h2>
+        <p class="section-lead">The program must stay on 24/7 and reach the camera. The README compares the options honestly, including what was and wasn't tested.</p>
+        <div class="row">
+          <div class="col-md-6 col-lg-3"><div class="card place"><span class="mi" aria-hidden="true">memory</span><h3>Raspberry Pi / mini PC</h3><p>At home, on the LAN. Nothing exposed. <strong>Recommended.</strong></p></div></div>
+          <div class="col-md-6 col-lg-3"><div class="card place"><span class="mi" aria-hidden="true">dns</span><h3>A VPS</h3><p>A few dollars a month. The setup used and tested by the author.</p></div></div>
+          <div class="col-md-6 col-lg-3"><div class="card place"><span class="mi" aria-hidden="true">inventory_2</span><h3>Docker</h3><p>A <code>Dockerfile</code> is included and works on any container host.</p></div></div>
+          <div class="col-md-6 col-lg-3"><div class="card place"><span class="mi" aria-hidden="true">cloud_upload</span><h3>Render free tier</h3><p>Possible, with limits (ephemeral disk, shared IPs). Tested up to startup only.</p></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section-alt" id="start" aria-labelledby="start-title">
+      <div class="container">
+        <h2 id="start-title">Quick start</h2>
+        <p class="section-lead">You need Python 3.10+, ffmpeg, a Google account with a YouTube channel, and the camera account from the Tapo app. The full guide covers every step, including the Google Cloud project and the router.</p>
+        <div class="terminal wide">
+          <div class="terminal-bar"><span></span><span></span><span></span></div>
+<pre><code><span class="dim">$</span> git clone https://github.com/LuigiElleBalotta/tapo-uploader.git
+<span class="dim">$</span> cd tapo-uploader &amp;&amp; python -m venv .venv &amp;&amp; . .venv/bin/activate
+<span class="dim">$</span> pip install -r requirements.txt
+<span class="dim">$</span> cp .env.example .env              <span class="dim"># camera user, password, address</span>
+<span class="dim">$</span> python tapo_uploader.py check       <span class="dim"># does the camera answer?</span>
+<span class="dim">$</span> python tapo_uploader.py auth        <span class="dim"># Google login, once</span>
+<span class="dim">$</span> python tapo_motion.py run           <span class="dim"># record on motion, upload once a day</span></code></pre>
+        </div>
+        <p class="cta"><a class="btn btn-primary btn-round btn-lg" href="https://github.com/LuigiElleBalotta/tapo-uploader#readme">Open the full guide</a></p>
+      </div>
+    </section>
+
+    <section class="section" id="faq" aria-labelledby="faq-title">
+      <div class="container">
+        <h2 id="faq-title">Questions</h2>
+        <div class="row">
+          <div class="col-lg-6">
+            <h3>Can a Tapo C200 upload to YouTube?</h3>
+            <p>Not by itself. This project adds it from outside: it reads the camera's RTSP stream and uploads with the official YouTube Data API.</p>
+            <h3>Do I need to root or flash the camera?</h3>
+            <p>No. The stock firmware already offers RTSP and ONVIF once you create the Camera Account in the Tapo app.</p>
+          </div>
+          <div class="col-lg-6">
+            <h3>Will the videos be public?</h3>
+            <p>No. They are uploaded as private and only your Google account can see them.</p>
+            <h3>Is it a replacement for a cloud plan?</h3>
+            <p>It replaces the storage part with your own YouTube channel. It does not replace the Tapo app's cloud timeline.</p>
+          </div>
+        </div>
+        <p class="note"><span class="mi small" aria-hidden="true">verified_user</span> Uploads go only to the YouTube channel of the person who signs in. The software is self-hosted and sends nothing to the author. Read the <a href="privacy.html">privacy policy</a>.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-6">
+          <strong>tapo-uploader</strong>
+          <p>MIT licensed. Made by <a href="https://github.com/LuigiElleBalotta">Luigi Elle Balotta</a>. Not affiliated with TP-Link or YouTube.</p>
+        </div>
+        <div class="col-md-6 text-md-right">
+          <a href="https://github.com/LuigiElleBalotta/tapo-uploader">Repository</a> ·
+          <a href="https://github.com/LuigiElleBalotta/tapo-uploader#readme">English guide</a> ·
+          <a href="https://github.com/LuigiElleBalotta/tapo-uploader/blob/main/README_IT.md">Guida italiana</a> ·
+          <a href="privacy.html">Privacy policy</a>
+          <p>Page built with <a href="https://github.com/creativetimofficial/now-ui-kit">Now UI Kit</a> (MIT, Creative Tim).</p>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script src="assets/vendor/now-ui-kit/js/jquery.min.js"></script>
+  <script src="assets/vendor/now-ui-kit/js/popper.min.js"></script>
+  <script src="assets/vendor/now-ui-kit/js/bootstrap.min.js"></script>
+  <script>
+    // the nav turns solid once the page is scrolled
+    (function () {
+      var nav = document.querySelector('.site-nav');
+      function update() { nav.classList.toggle('scrolled', window.scrollY > 40); }
+      window.addEventListener('scroll', update, { passive: true });
+      update();
+    })();
+  </script>
 </body>
 </html>
