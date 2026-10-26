@@ -76,7 +76,11 @@ def soap(ctx, url, body, timeout=30):
     Content-Length for every reply, so we read until the end of the SOAP envelope instead.
     """
     host, path = re.match(r"https?://([^/]+)(/.*)", url).groups()
-    name, _, port = host.partition(":")
+    if host.startswith("["):  # an IPv6 literal: [address]:port
+        name, _, rest = host[1:].partition("]")
+        port = rest.lstrip(":")
+    else:
+        name, _, port = host.partition(":")
     payload = soap_envelope(ctx, body)
     head = (f"POST {path} HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/soap+xml; charset=utf-8\r\n"
             f"Content-Length: {len(payload)}\r\n\r\n").encode()
@@ -97,16 +101,16 @@ def soap(ctx, url, body, timeout=30):
 
 def reach(ctx, url):
     """The camera advertises its LAN address: swap in the host and port we actually reach it on."""
-    return re.sub(r"//[^/]+/", f"//{ctx.onvif_address}:{ctx.onvif_port}/", url, count=1)
+    return re.sub(r"//[^/]+/", f"//{ctx.onvif_netloc}/", url, count=1)
 
 
 def subscribe(ctx):
     """Open a PullPoint subscription and return the URL to pull messages from."""
-    device = f"http://{ctx.onvif_address}:{ctx.onvif_port}/onvif/device_service"
+    device = f"http://{ctx.onvif_netloc}/onvif/device_service"
     caps = soap(ctx, device, '<GetCapabilities xmlns="http://www.onvif.org/ver10/device/wsdl">'
                              '<Category>All</Category></GetCapabilities>')
     found = re.search(r"<[^>]*Events[^>]*>\s*<[^>]*XAddr[^>]*>([^<]+)<", caps)
-    events_url = reach(ctx, found[1]) if found else f"http://{ctx.onvif_address}:{ctx.onvif_port}/onvif/service"
+    events_url = reach(ctx, found[1]) if found else f"http://{ctx.onvif_netloc}/onvif/service"
     reply = soap(ctx, events_url,
                  '<CreatePullPointSubscription xmlns="http://www.onvif.org/ver10/events/wsdl">'
                  f'<InitialTerminationTime>PT{SUBSCRIPTION_SECONDS + 30}S</InitialTerminationTime>'

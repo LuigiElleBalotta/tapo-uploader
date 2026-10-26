@@ -580,7 +580,7 @@ account locali e/o **Nextcloud** (i suoi gruppi diventano ruoli). Password e tok
    escluso al login successivo e resta fuori finché un amministratore non lo riattiva.
 6. **Avvio** dietro un reverse proxy HTTPS (nginx, Caddy, aaPanel): `python -m tapo_web run` (porta `PORT`, default
    8080), oppure come servizio con `deploy/tapo-web.service`, oppure in Docker con
-   `CMD ["python", "-u", "-m", "tapo_web", "run"]`. Non è pensata per il piano gratuito di Render (disco effimero).
+   `CMD ["python", "-u", "-m", "tapo_web", "run"]`. Dietro un reverse proxy imposta `TRUSTED_PROXY_HOPS=1`, altrimenti ogni visitatore sembra il proxy e i limiti ai tentativi di accesso non li distinguono. Non è pensata per il piano gratuito di Render (disco effimero).
 
 ### Aggiungere la camera di un amico
 
@@ -594,6 +594,7 @@ solo allora parte la registrazione.
 - Gli indirizzi delle camere devono essere pubblici: indirizzi privati, di loopback e link-local sono rifiutati, così
   nessuno può usare il server per raggiungere la sua rete. Imposta `ALLOW_PRIVATE_HOSTS=1` solo in una rete domestica.
 - Una camera per utente di default (`MAX_CAMERAS_PER_USER`), 20 in totale (`MAX_CAMERAS_TOTAL`).
+- Cancellare una camera cancella anche le sue registrazioni sul server.
 - Gli upload delle varie camere sono distribuiti nel tempo (`UPLOAD_AT`, poi `UPLOAD_STAGGER_MINUTES` di distanza).
 - I dati e i token di un utente disattivato vengono cancellati dopo `RETENTION_DAYS` (30). Se il collegamento
   YouTube di qualcuno manca o è revocato, i suoi clip restano 7 giorni e poi vengono scartati.

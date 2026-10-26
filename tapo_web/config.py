@@ -49,6 +49,7 @@ class Settings:
     retention_days: int = 30
     allow_private_hosts: bool = False
     local_login: bool = True
+    trusted_proxy_hops: int = 0
 
     @property
     def nextcloud_enabled(self):
@@ -101,4 +102,5 @@ class Settings:
             retention_days=_int(environ, "RETENTION_DAYS", 30),
             allow_private_hosts=_flag(environ, "ALLOW_PRIVATE_HOSTS"),
             local_login=_flag(environ, "LOCAL_LOGIN", True),
+            trusted_proxy_hops=_int(environ, "TRUSTED_PROXY_HOPS", 0),
         )

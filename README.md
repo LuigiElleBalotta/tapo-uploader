@@ -612,7 +612,7 @@ a "Test connection" button, and an administrator page. Sign-in is configurable: 
    their next login, and stays out until an administrator reactivates them.
 6. **Run it** behind an HTTPS reverse proxy (nginx, Caddy, aaPanel): `python -m tapo_web run` (port `PORT`, default
    8080), or as a service with `deploy/tapo-web.service`, or in Docker with
-   `CMD ["python", "-u", "-m", "tapo_web", "run"]`. It is not meant for Render's free plan (ephemeral disk).
+   `CMD ["python", "-u", "-m", "tapo_web", "run"]`. Behind one reverse proxy set `TRUSTED_PROXY_HOPS=1`, otherwise every visitor looks like the proxy and the login attempt limits cannot tell them apart. It is not meant for Render's free plan (ephemeral disk).
 
 ### Adding a friend's camera
 
@@ -626,6 +626,7 @@ motion events; only then does recording start.
 - Camera addresses must be public: private, loopback and link-local addresses are refused so nobody can use the
   server to reach its own network. Set `ALLOW_PRIVATE_HOSTS=1` only on a home network.
 - One camera per user by default (`MAX_CAMERAS_PER_USER`), 20 in total (`MAX_CAMERAS_TOTAL`).
+- Deleting a camera also deletes its recordings on the server.
 - Uploads of different cameras are spread over time (`UPLOAD_AT`, then `UPLOAD_STAGGER_MINUTES` apart).
 - A deactivated user's data and tokens are deleted after `RETENTION_DAYS` (30). If someone's YouTube link is
   missing or revoked, their clips are kept for 7 days and then discarded.

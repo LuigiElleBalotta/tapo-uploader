@@ -2,6 +2,7 @@
 import dataclasses
 import logging
 import random
+import shutil
 import socket
 import subprocess
 from dataclasses import dataclass
@@ -110,6 +111,7 @@ def register(app):
     state = app.extensions["tapo"]
     settings, db, vault = state["settings"], state["db"], state["vault"]
     state.setdefault("probe", probe_camera)
+    state.setdefault("supervisor", None)
 
     def me():
         return app.current_user()
@@ -214,7 +216,10 @@ def register(app):
     @app.post("/cameras/<int:camera_id>/delete")
     @app.login_required
     def camera_delete(camera_id):
-        owned(camera_id)
+        camera = owned(camera_id)
         db.delete_camera(me()["id"], camera_id)
-        flash("Camera deleted.", "info")
+        if state["supervisor"]:
+            state["supervisor"].sync()  # stops the recorder before its files go
+        shutil.rmtree(camera_data_dir(settings, camera), ignore_errors=True)  # the footage must not outlive the camera
+        flash("Camera deleted, with its recordings on the server.", "info")
         return redirect("/")

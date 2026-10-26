@@ -22,6 +22,11 @@ def create_app(settings: Settings, db: Database = None):
         SESSION_COOKIE_SECURE=settings.public_url.startswith("https://"),
         MAX_CONTENT_LENGTH=1024 * 1024,
     )
+    if settings.trusted_proxy_hops > 0:
+        # behind a reverse proxy the peer address is the proxy's: trust exactly that many X-Forwarded-* hops
+        from werkzeug.middleware.proxy_fix import ProxyFix
+        hops = settings.trusted_proxy_hops
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=hops, x_proto=hops, x_host=hops)
     if db is None:
         db = Database(settings.data_dir / "tapo.db")
         db.migrate()
@@ -83,6 +88,9 @@ def create_app(settings: Settings, db: Database = None):
     def safe_next(target):
         """Only a path on this site: never send someone to another host after login."""
         if not target:
+            return "/"
+        # browsers treat a backslash like a slash ("/\host" means "//host") and drop tabs and newlines
+        if "\\" in target or "%5c" in target.lower() or any(ord(char) < 32 or ord(char) == 127 for char in target):
             return "/"
         parts = urlsplit(target)
         if parts.scheme or parts.netloc or not target.startswith("/") or target.startswith("//"):

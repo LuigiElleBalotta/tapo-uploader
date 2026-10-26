@@ -21,6 +21,11 @@ def _env(name, default=None):
     return value
 
 
+def bracketed(host):
+    """An IPv6 literal needs square brackets inside a URL."""
+    return f"[{host}]" if ":" in host else host
+
+
 @dataclass(frozen=True)
 class CameraContext:
     name: str
@@ -53,7 +58,7 @@ class CameraContext:
         return f"{quote(self.user, safe='')}:{quote(self.password, safe='')}"
 
     def rtsp_url(self):
-        return f"rtsp://{self.credentials()}@{self.host}:{self.port}/{self.stream}"
+        return f"rtsp://{self.credentials()}@{bracketed(self.host)}:{self.port}/{self.stream}"
 
     def scrub(self, text):
         """ffmpeg and ffprobe echo the full rtsp:// URL in their errors: never log the password."""
@@ -62,6 +67,10 @@ class CameraContext:
     @property
     def onvif_address(self):
         return self.onvif_host or self.host
+
+    @property
+    def onvif_netloc(self):
+        return f"{bracketed(self.onvif_address)}:{self.onvif_port}"
 
     @property
     def record_dir(self):
