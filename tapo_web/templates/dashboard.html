@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Your page · tapo-uploader{% endblock %}
+{% block content %}
+<h1 class="h3">Hello, {{ current_user().display_name }}</h1>
+
+<h2 class="h5 section-title">Your camera</h2>
+<div class="row">
+  {% for camera in cameras %}
+  <div class="col-md-6">
+    <div class="card app-card">
+      <h3 class="h5"><a href="/cameras/{{ camera.id }}">{{ camera.name }}</a>
+        {% if camera.online %}<span class="badge badge-ok">online</span>
+        {% elif camera.enabled %}<span class="badge badge-bad">{{ camera.status }}</span>
+        {% else %}<span class="badge badge-idle">not recording</span>{% endif %}
+      </h3>
+      <table class="table table-sm mb-0">
+        <tr><th scope="row">Last motion</th><td>{{ camera.last_motion }}</td></tr>
+        <tr><th scope="row">Last upload</th><td>{{ camera.last_upload }}</td></tr>
+        <tr><th scope="row">Clips waiting</th><td>{{ camera.pending_clips }}</td></tr>
+      </table>
+      {% if camera.last_error %}<p class="text-muted mt-2 mb-0"><span class="mi small" aria-hidden="true">error_outline</span> {{ camera.last_error }}</p>{% endif %}
+      {% if not camera.enabled %}<p class="mt-2 mb-0"><a href="/cameras/{{ camera.id }}">Test the connection</a> to start recording.</p>{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+  {% if not cameras %}
+  <div class="col-12"><div class="card app-card"><p class="mb-0">No camera yet.</p></div></div>
+  {% endif %}
+</div>
+{% if can_add_camera %}<p><a class="btn btn-primary btn-round" href="/cameras/new">Add a camera</a></p>{% endif %}
+
+<h2 class="h5 section-title">Your videos on YouTube</h2>
+{% if not youtube.linked %}
+<div class="card app-card">
+  <p>Link your YouTube channel to upload there. Videos are private and only you can see them.</p>
+  <p class="mb-0"><a class="btn btn-primary btn-round" href="/youtube">Connect YouTube</a></p>
+</div>
+{% elif youtube.problem == 'revoked' %}
+<div class="alert alert-warning" role="alert">YouTube stopped accepting the saved access, so uploads are paused and your clips are kept. <a href="/youtube">Connect YouTube again</a>.</div>
+{% elif youtube.problem %}
+<div class="alert alert-warning" role="alert">YouTube did not answer just now. Your videos are safe; try again in a few minutes.</div>
+{% else %}
+<p class="text-muted">Channel: <strong>{{ youtube.channel }}</strong> · <a href="/youtube">manage</a></p>
+{% for playlist in youtube.playlists %}
+<div class="card app-card">
+  <h3 class="h5"><a href="{{ playlist.url }}" target="_blank" rel="noopener noreferrer">{{ playlist.title }}</a></h3>
+  <div class="row">
+    {% for video in playlist.videos %}
+    <div class="col-6 col-md-4 col-lg-3 mb-3">
+      <a class="video-tile" href="{{ video.url }}" target="_blank" rel="noopener noreferrer">
+        {% if video.thumbnail %}<img src="{{ video.thumbnail }}" alt="" loading="lazy" class="img-fluid">{% endif %}
+        <span class="video-title">{{ video.title }}</span>
+        <span class="text-muted video-date">{{ video.published }}</span>
+      </a>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% else %}
+<div class="card app-card"><p class="mb-0">No daily playlist yet. The first one appears after the first upload.</p></div>
+{% endfor %}
+{% endif %}
+{% endblock %}

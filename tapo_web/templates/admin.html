@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Admin · tapo-uploader{% endblock %}
+{% block content %}
+<h1 class="h3">Administration</h1>
+
+<div class="card app-card">
+  <h2 class="h5">YouTube quota today</h2>
+  <p class="mb-0"><strong>{{ quota_used }} / {{ quota_limit }}</strong> units used (Pacific day). A full daily upload costs about 1,701.</p>
+</div>
+
+<div class="card app-card">
+  <h2 class="h5">Users</h2>
+  <div class="table-responsive">
+  <table class="table">
+    <thead><tr><th>Name</th><th>Sign-in</th><th>Role</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for user in users %}
+      <tr>
+        <td>{{ user.display_name }} <span class="text-muted">({{ user.username }})</span></td>
+        <td>{{ user.origin }}</td>
+        <td>{{ user.role }}
+          {% if user.origin == 'local' %}
+          <form method="post" action="/admin/users/{{ user.id }}/role" class="d-inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="role" value="{{ 'user' if user.role == 'admin' else 'admin' }}">
+            <button class="btn btn-link btn-sm" type="submit">make {{ 'user' if user.role == 'admin' else 'admin' }}</button>
+          </form>
+          {% endif %}
+        </td>
+        <td>{% if user.active %}<span class="badge badge-ok">active</span>{% else %}<span class="badge badge-idle">deactivated</span>{% endif %}</td>
+        <td>
+          <form method="post" action="/admin/users/{{ user.id }}/active">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="active" value="{{ '0' if user.active else '1' }}">
+            <button class="btn btn-neutral btn-sm" type="submit">{{ 'Deactivate' if user.active else 'Reactivate' }}</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="card app-card">
+  <h2 class="h5">Cameras</h2>
+  <div class="table-responsive">
+  <table class="table">
+    <thead><tr><th>Camera</th><th>Owner</th><th>Status</th><th>Running</th><th>Last problem</th></tr></thead>
+    <tbody>
+    {% for camera in cameras %}
+      <tr>
+        <td>{{ camera.name }}</td><td>{{ camera.owner_name }}</td>
+        <td>{{ camera.status }}{% if not camera.enabled %} (disabled){% endif %}</td>
+        <td>{{ 'yes' if camera.running else 'no' }}</td>
+        <td>{{ camera.last_error or '' }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="text-muted">No cameras yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="card app-card">
+  <h2 class="h5">Settings (read only)</h2>
+  <p class="text-muted">Secrets are never shown here. Change these in the server's environment.</p>
+  <table class="table">
+    <tbody>
+    {% for name, value in shown.items() %}<tr><th scope="row">{{ name }}</th><td>{{ value }}</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

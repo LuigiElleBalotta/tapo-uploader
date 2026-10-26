@@ -1,0 +1,27 @@
+# The multi-account web app: users sign in, link their own camera and YouTube channel, and a supervisor
+# runs one recorder per camera. See "Multi-account mode" in README.md.
+# Install: sudo cp tapo-web.service /etc/systemd/system/ && sudo systemctl daemon-reload
+#          sudo systemctl enable --now tapo-web
+# Status:  systemctl status tapo-web        Logs: journalctl -u tapo-web -f
+# Put the settings (MULTIUSER=1, ENCRYPTION_KEY, SECRET_KEY, PUBLIC_URL, NEXTCLOUD_*...) in /etc/tapo-web.env,
+# readable only by root: sudo chmod 600 /etc/tapo-web.env
+# Replace UTENTE with your Linux user. Serve it behind an HTTPS reverse proxy (nginx, Caddy, aaPanel).
+# Do not enable this together with tapo-uploader or tapo-motion for the same camera: one RTSP session per stream.
+
+[Unit]
+Description=tapo-uploader multi-account web app
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Upload times and clip names follow this time zone.
+Environment=TZ=Europe/Rome
+EnvironmentFile=/etc/tapo-web.env
+User=UTENTE
+WorkingDirectory=/home/UTENTE/tapo-uploader
+ExecStart=/home/UTENTE/tapo-uploader/.venv/bin/python -u -m tapo_web run
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

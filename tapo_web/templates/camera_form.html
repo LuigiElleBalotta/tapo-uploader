@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Add a camera · tapo-uploader{% endblock %}
+{% block content %}
+<h1 class="h3">Add your camera</h1>
+<p class="text-muted">Videos from this camera go to your own YouTube channel. First create a <em>Camera Account</em> in the Tapo app (Settings, Advanced, Camera Account): it is not your Tapo login.</p>
+{% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
+<div class="card app-card">
+  <form method="post" action="{{ url_for('camera_create') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-group"><label for="name">Name</label>
+      <input class="form-control" id="name" name="name" maxlength="60" required value="{{ request.form.get('name', '') }}"></div>
+    <div class="form-group"><label for="host">Your home's address (dynamic DNS name)</label>
+      <input class="form-control" id="host" name="host" placeholder="my-camera.example.com" required value="{{ request.form.get('host', '') }}">
+      <small class="text-muted">A name that always points to your home internet connection. The next page explains how.</small></div>
+    <div class="form-group"><label for="camera_user">Camera account username</label>
+      <input class="form-control" id="camera_user" name="camera_user" autocomplete="off" required value="{{ request.form.get('camera_user', '') }}"></div>
+    <div class="form-group"><label for="camera_password">Camera account password</label>
+      <input class="form-control" id="camera_password" name="camera_password" type="password" autocomplete="new-password" required>
+      <small class="text-muted">Stored encrypted and never shown again.</small></div>
+    <div class="form-group"><label for="stream">Video quality</label>
+      <select class="form-control" id="stream" name="stream">
+        <option value="stream1">High (stream1)</option>
+        <option value="stream2" {% if request.form.get('stream') == 'stream2' %}selected{% endif %}>Low (stream2)</option>
+      </select></div>
+    <button class="btn btn-primary btn-round" type="submit">Continue</button>
+  </form>
+</div>
+{% endblock %}

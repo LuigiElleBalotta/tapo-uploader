@@ -53,6 +53,7 @@ container.
 - [5. Reaching the camera from the internet](#5-reaching-the-camera-from-the-internet)
 - [6. Final check](#6-final-check)
 - [Motion mode: one video per day](#motion-mode-one-video-per-day)
+- [Multi-account mode](#multi-account-mode)
 - [Daily use](#daily-use)
 - [Configuration](#configuration)
 - [Under the hood](#under-the-hood)
@@ -384,7 +385,7 @@ sudo apt-get update
 sudo apt-get install -y ffmpeg python3-venv      # python3-venv is really needed on Ubuntu
 
 mkdir -p ~/tapo-uploader && cd ~/tapo-uploader
-# copy here: tapo_uploader.py, tapo_motion.py, requirements.txt, .env, client_secret.json, token.json
+# copy here: tapo_uploader.py, tapo_motion.py, camera_context.py, camera_worker.py, requirements.txt, .env, client_secret.json, token.json
 chmod 600 .env client_secret.json token.json     # only you can read them
 
 python3 -m venv .venv
@@ -569,6 +570,67 @@ minute, the upload of the day's video (`UPLOAD_AT=00:00` makes it due immediatel
   keyframes).
 - If the service restarts during an event, that clip is lost.
 - With a still camera `listen` prints nothing: the camera only reports state changes.
+
+---
+
+## Multi-account mode
+
+An **optional** mode for a group of trusted people (friends, family) on one server. Each person signs in, links
+**their own camera** and **their own YouTube channel**, and sees only their own videos and camera status on a
+personal page. Nothing changes for single-user setups: without `MULTIUSER=1` the programs above work exactly as
+before, with the same `.env`.
+
+What it adds: a small web app (`python -m tapo_web run`) with a SQLite database, a supervisor that runs one
+recorder per camera, a router guide for each friend (manual steps and a text to paste into an AI assistant),
+a "Test connection" button, and an administrator page. Sign-in is configurable: local accounts, and/or
+**Nextcloud** (its groups become roles). Passwords and tokens are stored encrypted.
+
+> **Quota, read this first.** All users share the Google project's YouTube quota (10,000 units a day by default).
+> One full daily upload costs about 1,700 units, so **one project serves about 5 or 6 users** at one upload a day.
+> Ways around it: ask Google for a higher quota, let some users upload every other day, or enable
+> `ALLOW_OWN_GOOGLE_CLIENT` so a user brings their own Google project. The admin page shows the quota used today.
+
+### Setup
+
+1. **Install** on the server: copy the project (including the `tapo_web` folder), then
+   `python3 -m venv .venv && .venv/bin/pip install -r requirements-web.txt`.
+2. **Google project.** In Google Cloud create an OAuth client of type **Web application** (not Desktop) with the
+   authorized redirect URI `https://YOUR-ADDRESS/youtube/callback`. Put its JSON in `YOUTUBE_CLIENT_SECRET_JSON`.
+   The app must be *In production* (step 2.4 above); beyond 100 users Google requires verification. Other
+   people will now use your app: update the consent screen and the privacy policy page to say so.
+3. **Keys and settings.** Copy the multi-account block of `.env.example` and fill it in. Generate the two keys:
+   `python -c "from tapo_web.crypto import Vault; print(Vault.generate_key())"` for `ENCRYPTION_KEY`, and any long
+   random string for `SECRET_KEY`. Keep `ENCRYPTION_KEY` backed up: without it the stored passwords and tokens
+   cannot be read. Set `PUBLIC_URL` (HTTPS) and `SERVER_PUBLIC_IP` (the address friends will allow in their routers).
+4. **First administrator.** `python -m tapo_web create-admin`, or set `ADMIN_USERNAME` and `ADMIN_PASSWORD` for the
+   first start.
+5. **Nextcloud (optional).** In Nextcloud, Settings, Security, *OAuth 2.0 clients*: add a client with the redirect
+   URI `https://YOUR-ADDRESS/auth/nextcloud/callback`, then set `NEXTCLOUD_URL`, `NEXTCLOUD_CLIENT_ID` and
+   `NEXTCLOUD_CLIENT_SECRET`. Roles come from groups: members of `NEXTCLOUD_ADMIN_GROUP` (default `admin`) are
+   administrators, members of `NEXTCLOUD_USER_GROUP` may use the service. If that group is not set, only
+   administrators can sign in. Roles are re-checked at every login: someone removed from the group is locked out at
+   their next login, and stays out until an administrator reactivates them.
+6. **Run it** behind an HTTPS reverse proxy (nginx, Caddy, aaPanel): `python -m tapo_web run` (port `PORT`, default
+   8080), or as a service with `deploy/tapo-web.service`, or in Docker with
+   `CMD ["python", "-u", "-m", "tapo_web", "run"]`. Behind one reverse proxy set `TRUSTED_PROXY_HOPS=1`, otherwise every visitor looks like the proxy and the login attempt limits cannot tell them apart. It is not meant for Render's free plan (ephemeral disk).
+
+### Adding a friend's camera
+
+The friend signs in, then **Connect YouTube** (their own channel), then **Add a camera** (their dynamic DNS name,
+the camera account from the Tapo app). The server assigns two random external ports and shows a router guide:
+open those two ports **only for `SERVER_PUBLIC_IP`**. **Test connection** checks the port, the video stream and the
+motion events; only then does recording start.
+
+### Good to know
+
+- Camera addresses must be public: private, loopback and link-local addresses are refused so nobody can use the
+  server to reach its own network. Set `ALLOW_PRIVATE_HOSTS=1` only on a home network.
+- One camera per user by default (`MAX_CAMERAS_PER_USER`), 20 in total (`MAX_CAMERAS_TOTAL`).
+- Deleting a camera also deletes its recordings on the server.
+- Uploads of different cameras are spread over time (`UPLOAD_AT`, then `UPLOAD_STAGGER_MINUTES` apart).
+- A deactivated user's data and tokens are deleted after `RETENTION_DAYS` (30). If someone's YouTube link is
+  missing or revoked, their clips are kept for 7 days and then discarded.
+- Every setting is listed in `.env.example`.
 
 ---
 

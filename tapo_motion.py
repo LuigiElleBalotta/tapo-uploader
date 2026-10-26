@@ -11,6 +11,9 @@ How it works (see README.md):
    joined into one video and uploaded as private (the description lists when each event
    starts, which YouTube shows as chapters), then the files are deleted.
 
+Every function takes the camera's CameraContext as its first argument, so the same code serves
+one camera configured in .env or many cameras configured in a database.
+
 Commands:
     python tapo_motion.py listen [seconds]  print the motion events sent by the camera
     python tapo_motion.py run               record around motion, upload once a day
@@ -32,21 +35,9 @@ from datetime import datetime, timezone
 from googleapiclient.errors import HttpError
 
 import tapo_uploader as base
-from tapo_uploader import DATA, FILE_RE, env, log, scrub
+from camera_context import CameraContext
+from tapo_uploader import FILE_RE, log
 
-PRE = int(env("MOTION_PRE_SECONDS", "30"))
-POST = int(env("MOTION_POST_SECONDS", "300"))
-EXTEND_WITHIN = int(env("MOTION_EXTEND_WITHIN", "30"))
-SEGMENT = int(env("BUFFER_SEGMENT_SECONDS", "10"))
-UPLOAD_AT = datetime.strptime(env("UPLOAD_AT", "21:00"), "%H:%M").time()
-# ONVIF items that count as "something moves": IsMotion = motion detection, IsPeople = person
-# detection. Which ones the camera sends depends on what is switched on in the Tapo app.
-MOTION_EVENTS = {name.strip().lower() for name in env("MOTION_EVENTS", "IsMotion,IsPeople").split(",")}
-BUFFER_DIR = DATA / env("BUFFER_DIR", "buffer")
-EVENTS_DIR = DATA / env("EVENTS_DIR", "events")
-# ONVIF can sit behind a different host/port than RTSP (e.g. a second port forward)
-ONVIF_HOST = env("ONVIF_HOST", env("CAMERA_HOST"))
-ONVIF_PORT = env("ONVIF_PORT", "2020")
 # the camera's subscription is short-lived: ask for a new one before it expires
 SUBSCRIPTION_SECONDS = 90
 
@@ -56,18 +47,21 @@ PASSWORD_DIGEST = "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-usern
 BASE64_ENCODING = "http://docs.oasis-open.org/wss/2004/01/oasis-200401-soap-message-security-1.0#Base64Binary"
 
 
+def _ignore(kind, detail=""):
+    """Default status sink: the single-user programs only log."""
+
+
 # ---------- ONVIF motion events ----------
 
-def soap_envelope(body):
+def soap_envelope(ctx, body):
     """SOAP message with a WS-Security UsernameToken (password digest), as ONVIF requires."""
     nonce = os.urandom(16)
     created = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    password = env("CAMERA_PASS")
-    digest = base64.b64encode(hashlib.sha1(nonce + created.encode() + password.encode()).digest()).decode()
+    digest = base64.b64encode(hashlib.sha1(nonce + created.encode() + ctx.password.encode()).digest()).decode()
     return (
         '<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"><s:Header>'
         f'<wsse:Security xmlns:wsse="{WSSE}" xmlns:wsu="{WSU}"><wsse:UsernameToken>'
-        f'<wsse:Username>{env("CAMERA_USER")}</wsse:Username>'
+        f'<wsse:Username>{ctx.user}</wsse:Username>'
         f'<wsse:Password Type="{PASSWORD_DIGEST}">{digest}</wsse:Password>'
         f'<wsse:Nonce EncodingType="{BASE64_ENCODING}">{base64.b64encode(nonce).decode()}</wsse:Nonce>'
         f'<wsu:Created>{created}</wsu:Created></wsse:UsernameToken></wsse:Security></s:Header>'
@@ -75,15 +69,19 @@ def soap_envelope(body):
     ).encode()
 
 
-def soap(url, body, timeout=30):
+def soap(ctx, url, body, timeout=30):
     """POST a SOAP message over a plain socket.
 
     http.client and urllib hang on this camera: it does not close the connection or give a usable
     Content-Length for every reply, so we read until the end of the SOAP envelope instead.
     """
     host, path = re.match(r"https?://([^/]+)(/.*)", url).groups()
-    name, _, port = host.partition(":")
-    payload = soap_envelope(body)
+    if host.startswith("["):  # an IPv6 literal: [address]:port
+        name, _, rest = host[1:].partition("]")
+        port = rest.lstrip(":")
+    else:
+        name, _, port = host.partition(":")
+    payload = soap_envelope(ctx, body)
     head = (f"POST {path} HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/soap+xml; charset=utf-8\r\n"
             f"Content-Length: {len(payload)}\r\n\r\n").encode()
     data = b""
@@ -97,60 +95,63 @@ def soap(url, body, timeout=30):
     reply = data.decode(errors="replace")
     status = reply.split("\r\n", 1)[0]
     if " 200 " not in status or "Fault>" in reply:
-        raise RuntimeError(f"ONVIF error: {status} {scrub(reply[-300:])}")
+        raise RuntimeError(f"ONVIF error: {status} {ctx.scrub(reply[-300:])}")
     return reply
 
 
-def reach(url):
+def reach(ctx, url):
     """The camera advertises its LAN address: swap in the host and port we actually reach it on."""
-    return re.sub(r"//[^/]+/", f"//{ONVIF_HOST}:{ONVIF_PORT}/", url, count=1)
+    return re.sub(r"//[^/]+/", f"//{ctx.onvif_netloc}/", url, count=1)
 
 
-def subscribe():
+def subscribe(ctx):
     """Open a PullPoint subscription and return the URL to pull messages from."""
-    device = f"http://{ONVIF_HOST}:{ONVIF_PORT}/onvif/device_service"
-    caps = soap(device, '<GetCapabilities xmlns="http://www.onvif.org/ver10/device/wsdl">'
-                        '<Category>All</Category></GetCapabilities>')
+    device = f"http://{ctx.onvif_netloc}/onvif/device_service"
+    caps = soap(ctx, device, '<GetCapabilities xmlns="http://www.onvif.org/ver10/device/wsdl">'
+                             '<Category>All</Category></GetCapabilities>')
     found = re.search(r"<[^>]*Events[^>]*>\s*<[^>]*XAddr[^>]*>([^<]+)<", caps)
-    events_url = reach(found[1]) if found else f"http://{ONVIF_HOST}:{ONVIF_PORT}/onvif/service"
-    reply = soap(events_url,
+    events_url = reach(ctx, found[1]) if found else f"http://{ctx.onvif_netloc}/onvif/service"
+    reply = soap(ctx, events_url,
                  '<CreatePullPointSubscription xmlns="http://www.onvif.org/ver10/events/wsdl">'
                  f'<InitialTerminationTime>PT{SUBSCRIPTION_SECONDS + 30}S</InitialTerminationTime>'
                  '</CreatePullPointSubscription>')
     address = re.search(r"SubscriptionReference>.*?Address[^>]*>([^<]+)<", reply, re.S)
     if not address:
         raise RuntimeError("no subscription address in the ONVIF reply")
-    return reach(address[1])
+    return reach(ctx, address[1])
 
 
-def motion_states(reply):
+def motion_states(ctx, reply):
     """Yield (item name, on/off) for every motion-like notification in a PullMessages reply."""
     for note in re.findall(r"<[^>]*NotificationMessage[^>]*>.*?</[^>]*NotificationMessage>", reply, re.S):
         for attributes in re.findall(r"SimpleItem([^>]*)>", note):
             # this camera writes Value before Name, other firmwares do the opposite
             name, value = re.search(r'Name="([^"]*)"', attributes), re.search(r'Value="([^"]*)"', attributes)
-            if name and value and name[1].lower() in MOTION_EVENTS:
+            if name and value and name[1].lower() in ctx.motion_events:
                 yield name[1], value[1].lower() == "true"
 
 
-def onvif_loop(events, stop):
+def onvif_loop(ctx, events, stop, report=_ignore):
     last = {}  # the camera repeats the same state in every reply: only pass on changes
     backoff = 5
     while not stop.is_set():
         try:
-            pull_url = subscribe()
+            pull_url = subscribe(ctx)
             backoff = 5
+            report("online", "")
             renew_at = time.monotonic() + SUBSCRIPTION_SECONDS
             while not stop.is_set() and time.monotonic() < renew_at:
-                reply = soap(pull_url, '<PullMessages xmlns="http://www.onvif.org/ver10/events/wsdl">'
-                                       '<Timeout>PT1S</Timeout><MessageLimit>20</MessageLimit></PullMessages>',
+                reply = soap(ctx, pull_url, '<PullMessages xmlns="http://www.onvif.org/ver10/events/wsdl">'
+                                            '<Timeout>PT1S</Timeout><MessageLimit>20</MessageLimit></PullMessages>',
                              timeout=15)
-                for name, value in motion_states(reply):
+                for name, value in motion_states(ctx, reply):
                     if last.get(name) != value:
                         last[name] = value
                         events.put((time.time(), name, value))
         except Exception as err:
-            log.warning("onvif: %s (retry in %ss)", scrub(str(err)), backoff)
+            message = ctx.scrub(str(err))
+            log.warning("onvif: %s (retry in %ss)", message, backoff)
+            report("offline", message)
             stop.wait(backoff)
             backoff = min(backoff * 2, 120)
 
@@ -163,10 +164,10 @@ class Event:
     end: float    # recording stops here, unless late motion pushes it further
 
 
-def segments():
+def segments(ctx):
     """Ring buffer files as (epoch second the segment starts at, path), oldest first."""
     found = []
-    for path in BUFFER_DIR.glob("*.mp4"):
+    for path in ctx.buffer_dir.glob("*.mp4"):
         match = FILE_RE.match(path.name)
         if match:
             start = datetime.strptime(match.group(1) + match.group(2), "%Y%m%d%H%M%S").timestamp()
@@ -174,10 +175,10 @@ def segments():
     return sorted(found)
 
 
-def prune_buffer(event, now):
-    """Drop segments that no event can need: keep PRE seconds before now, or before the open event."""
-    keep_from = (event.start if event else now) - PRE - 2 * SEGMENT
-    for start, path in segments():
+def prune_buffer(ctx, event, now):
+    """Drop segments that no event can need: keep ctx.pre seconds before now, or before the open event."""
+    keep_from = (event.start if event else now) - ctx.pre - 2 * ctx.segment
+    for start, path in segments(ctx):
         if start < keep_from:
             path.unlink(missing_ok=True)
 
@@ -197,32 +198,32 @@ def join(parts, out):
         part.unlink(missing_ok=True)
 
 
-def save_clip(event):
-    first, last = event.start - PRE, event.end
-    parts = [path for start, path in segments() if start + SEGMENT > first and start < last]
+def save_clip(ctx, event):
+    first, last = event.start - ctx.pre, event.end
+    parts = [path for start, path in segments(ctx) if start + ctx.segment > first and start < last]
     if not parts:
         log.warning("no buffered video for the event at %s", datetime.fromtimestamp(event.start))
         return
     when = datetime.fromtimestamp(event.start)
-    day_dir = EVENTS_DIR / f"{when:%Y%m%d}"
+    day_dir = ctx.events_dir / f"{when:%Y%m%d}"
     day_dir.mkdir(parents=True, exist_ok=True)
     join(parts, day_dir / f"{when:%H%M%S}.mp4")
     log.info("clip saved: event at %s, %d segments, ends %s", when.strftime("%H:%M:%S"), len(parts),
              datetime.fromtimestamp(event.end).strftime("%H:%M:%S"))
 
 
-def on_motion(event, at):
-    """Motion starts an event; late motion (inside EXTEND_WITHIN of the end) extends it."""
+def on_motion(ctx, event, at):
+    """Motion starts an event; late motion (inside ctx.extend_within of the end) extends it."""
     if event is None:
-        log.info("motion: recording from %ds before to %ds after", PRE, POST)
-        return Event(start=at, end=at + POST)
-    if event.end - at <= EXTEND_WITHIN:
-        log.info("motion near the end of the window: recording %ds more", POST)
-        event.end = at + POST
+        log.info("motion: recording from %ds before to %ds after", ctx.pre, ctx.post)
+        return Event(start=at, end=at + ctx.post)
+    if event.end - at <= ctx.extend_within:
+        log.info("motion near the end of the window: recording %ds more", ctx.post)
+        event.end = at + ctx.post
     return event
 
 
-def controller(events, stop):
+def controller(ctx, events, stop, report=_ignore):
     event = None
     states = {}  # item name -> on/off, so one detector switching off does not hide another
     last_prune = 0.0
@@ -231,22 +232,25 @@ def controller(events, stop):
             at, name, value = events.get(timeout=1)
             states[name] = value
             fresh = value  # a new "on"
+            if value:
+                report("motion", name)
         except queue.Empty:
             at, fresh = time.time(), False
         now = time.time()
         moving = any(states.values())
-        if moving and (fresh or event is None or event.end - at <= EXTEND_WITHIN):
+        if moving and (fresh or event is None or event.end - at <= ctx.extend_within):
             # a new "motion on", or motion that is still going when the window is almost over
-            event = on_motion(event, at)
+            event = on_motion(ctx, event, at)
         # wait for the segment that holds the end of the event to be closed
-        if event and now >= event.end + SEGMENT + 3:
+        if event and now >= event.end + ctx.segment + 3:
             try:
-                save_clip(event)
-            except Exception:
+                save_clip(ctx, event)
+            except Exception as err:
                 log.exception("could not save the clip")
+                report("error", f"could not save the clip: {ctx.scrub(str(err))}")
             event = None
         if now - last_prune > 10:
-            prune_buffer(event, now)
+            prune_buffer(ctx, event, now)
             last_prune = now
 
 
@@ -263,15 +267,15 @@ def timestamp(seconds):
     return f"{hours}:{rest // 60:02d}:{rest % 60:02d}" if hours else f"{rest // 60}:{rest % 60:02d}"
 
 
-def due_days(force=False):
+def due_days(ctx, force=False):
     now = datetime.now()
-    for day_dir in sorted(EVENTS_DIR.glob("[0-9]" * 8)):
+    for day_dir in sorted(ctx.events_dir.glob("[0-9]" * 8)):
         day = datetime.strptime(day_dir.name, "%Y%m%d").date()
-        if force or day < now.date() or now.time() >= UPLOAD_AT:
+        if force or day < now.date() or now.time() >= ctx.upload_at:
             yield day_dir
 
 
-def upload_day(yt, state, day_dir):
+def upload_day(ctx, yt, state, day_dir, report=_ignore):
     clips = sorted(day_dir.glob("[0-9]*.mp4"))
     if not clips:
         day_dir.rmdir()
@@ -284,12 +288,13 @@ def upload_day(yt, state, day_dir):
         offset += clip_seconds(clip)
     last_end = datetime.strptime(day_dir.name + clips[-1].stem, "%Y%m%d%H%M%S").timestamp() \
         + clip_seconds(clips[-1])
-    title = (f"{env('PLAYLIST_PREFIX', 'Tapo')} {first:%Y-%m-%d} eventi "
+    title = (f"{ctx.playlist_prefix} {first:%Y-%m-%d} eventi "
              f"{first:%H:%M}-{datetime.fromtimestamp(last_end):%H:%M} ({len(clips)})")
     description = "\n".join(lines[:120])  # YouTube allows 5000 characters
     day_file = day_dir / "day.mp4"
     join(clips, day_file)
-    base.upload(yt, state, day_file, first, title=title, description=description)
+    base.upload(ctx, yt, state, day_file, first, title=title, description=description)
+    report("uploaded", title)
     # delete only what was uploaded: a clip saved meanwhile waits for the next upload
     for path in clips + [day_file]:
         path.unlink(missing_ok=True)
@@ -299,38 +304,50 @@ def upload_day(yt, state, day_dir):
         pass
 
 
-def upload_pending(state, force=False):
-    days = list(due_days(force))
-    if not days:
+def upload_pending(ctx, state, force=False, report=_ignore, gate=None):
+    """Upload the days that are due. A `gate` (multi-account mode) keeps the shared YouTube quota: it says when
+    this camera may upload and is charged after every upload."""
+    days = list(due_days(ctx, force))
+    if not days or (gate and not gate.allowed()):
         return
-    yt = base.youtube_client()
+    yt = base.youtube_client(ctx)
     for day_dir in days:
-        upload_day(yt, state, day_dir)
+        if gate and not gate.allowed():
+            return
+        upload_day(ctx, yt, state, day_dir, report)
+        if gate:
+            gate.charge()
 
 
-def daily_loop(stop):
-    state = base.load_state()
+def daily_loop(ctx, stop, report=_ignore, gate=None):
+    state = base.load_state(ctx)
     while not stop.is_set():
         try:
-            upload_pending(state)
+            upload_pending(ctx, state, report=report, gate=gate)
         except HttpError as err:
             if base.is_quota_error(err):
                 log.error("YouTube quota exceeded, sleeping 1h")
+                report("error", "YouTube quota exceeded")
+                if gate:
+                    gate.exhausted()  # Google says it is gone: the other cameras stop trying today too
                 stop.wait(3600)
                 continue
             log.exception("YouTube error")
-        except Exception:
+            report("error", f"YouTube error: {ctx.scrub(str(err))}")
+        except Exception as err:
             log.exception("daily upload failed")
+            report("error", ctx.scrub(str(err)))
         stop.wait(60)
 
 
 # ---------- commands ----------
 
 def cmd_listen():
+    ctx = CameraContext.from_env()
     seconds = int(sys.argv[2]) if len(sys.argv) > 2 else 60
     events, stop = queue.Queue(), threading.Event()
-    threading.Thread(target=onvif_loop, args=(events, stop), daemon=True).start()
-    print(f"listening {seconds}s for motion events from {ONVIF_HOST}:{ONVIF_PORT} ...")
+    threading.Thread(target=onvif_loop, args=(ctx, events, stop), daemon=True).start()
+    print(f"listening {seconds}s for motion events from {ctx.onvif_address}:{ctx.onvif_port} ...")
     end = time.time() + seconds
     while time.time() < end:
         try:
@@ -342,7 +359,9 @@ def cmd_listen():
 
 
 def cmd_upload():
-    upload_pending(base.load_state(), force=True)
+    ctx = CameraContext.from_env()
+    ctx.ensure_dirs()
+    upload_pending(ctx, base.load_state(ctx), force=True)
 
 
 def health_server(port):
@@ -368,30 +387,22 @@ def health_server(port):
 
 
 def cmd_run():
-    base.youtube_client()  # fail fast if not authorised
+    from camera_worker import CameraWorker
+    ctx = CameraContext.from_env()
+    base.youtube_client(ctx)  # fail fast if not authorised
     if os.getenv("PORT"):  # set by web-service hosts (Render): they need something listening
         health_server(int(os.environ["PORT"]))
-    BUFFER_DIR.mkdir(exist_ok=True)
-    EVENTS_DIR.mkdir(exist_ok=True)
-    for _, path in segments():
+    ctx.ensure_dirs()
+    for _, path in segments(ctx):
         path.unlink(missing_ok=True)  # leftovers of a previous run
-    events, stop = queue.Queue(), threading.Event()
-    threads = [
-        threading.Thread(target=base.record_loop, args=(BUFFER_DIR, SEGMENT, stop)),
-        threading.Thread(target=onvif_loop, args=(events, stop)),
-        threading.Thread(target=controller, args=(events, stop)),
-        threading.Thread(target=daily_loop, args=(stop,)),
-    ]
-    for thread in threads:
-        thread.start()
+    worker = CameraWorker(ctx, lambda kind, detail: None)
+    worker.start()
     try:
-        while any(thread.is_alive() for thread in threads):
+        while worker.alive:
             time.sleep(1)
     except KeyboardInterrupt:
         log.info("stopping")
-        stop.set()
-        for thread in threads:
-            thread.join()
+        worker.stop()
 
 
 def main():

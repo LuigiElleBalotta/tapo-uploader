@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}{{ camera.name }} · tapo-uploader{% endblock %}
+{% block content %}
+<h1 class="h3">{{ camera.name }}</h1>
+{% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
+{% if result %}
+<div class="alert alert-{{ 'success' if result.ok else 'danger' }}" role="alert">
+  <strong>{{ 'Connection OK. Recording is enabled.' if result.ok else 'The connection test failed.' }}</strong><br>
+  Video port: {{ 'open' if result.tcp else 'no answer' }} · Video stream: {{ 'readable' if result.rtsp else 'not readable' }} · Motion events: {{ 'working' if result.onvif else 'not working' }}<br>
+  {{ result.detail }}
+</div>
+{% endif %}
+<div class="card app-card">
+  <p>Status: {% if camera.enabled %}<span class="badge badge-ok">recording enabled</span>{% else %}<span class="badge badge-idle">not recording</span>{% endif %}
+     <span class="text-muted">{{ camera.status }}</span></p>
+  {% if camera.last_error %}<p class="text-muted">Last problem: {{ camera.last_error }}</p>{% endif %}
+  <p>Address <code>{{ camera.host }}</code> · video port <code>{{ camera.port }}</code> · events port <code>{{ camera.onvif_port }}</code></p>
+  <form method="post" action="/cameras/{{ camera.id }}/test" class="d-inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-primary btn-round" type="submit">Test connection</button>
+  </form>
+  <a class="btn btn-neutral btn-round" href="/cameras/{{ camera.id }}/guide">Router guide</a>
+</div>
+
+<div class="card app-card">
+  <h2 class="h5">Settings</h2>
+  <form method="post" action="/cameras/{{ camera.id }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-group"><label for="name">Name</label><input class="form-control" id="name" name="name" maxlength="60" required value="{{ camera.name }}"></div>
+    <div class="form-group"><label for="host">Address</label><input class="form-control" id="host" name="host" required value="{{ camera.host }}"></div>
+    <div class="form-group"><label for="camera_user">Camera account username</label><input class="form-control" id="camera_user" name="camera_user" autocomplete="off" required placeholder="(unchanged: type it again to keep it)"></div>
+    <div class="form-group"><label for="camera_password">New password</label><input class="form-control" id="camera_password" name="camera_password" type="password" autocomplete="new-password" placeholder="Leave empty to keep the current one"></div>
+    <div class="form-group"><label for="stream">Video quality</label>
+      <select class="form-control" id="stream" name="stream">
+        <option value="stream1" {% if camera.stream == 'stream1' %}selected{% endif %}>High (stream1)</option>
+        <option value="stream2" {% if camera.stream == 'stream2' %}selected{% endif %}>Low (stream2)</option>
+      </select></div>
+    <button class="btn btn-primary btn-round" type="submit">Save</button>
+  </form>
+</div>
+
+<form method="post" action="/cameras/{{ camera.id }}/delete">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <button class="btn btn-neutral btn-round" type="submit">Delete this camera</button>
+</form>
+{% endblock %}
