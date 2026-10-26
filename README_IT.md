@@ -29,6 +29,7 @@ setup completo, passo per passo, com'è stato fatto davvero, compresi i problemi
 - [6. Verifica finale](#6-verifica-finale)
 - [Modalità a movimento: un video al giorno](#modalità-a-movimento-un-video-al-giorno)
 - [Modalità multi-account](#modalità-multi-account)
+- [Dove vanno le registrazioni](#dove-vanno-le-registrazioni)
 - [Uso quotidiano](#uso-quotidiano)
 - [Configurazione](#configurazione)
 - [Come funziona](#come-funziona)
@@ -599,6 +600,44 @@ solo allora parte la registrazione.
 - I dati e i token di un utente disattivato vengono cancellati dopo `RETENTION_DAYS` (30). Se il collegamento
   YouTube di qualcuno manca o è revocato, i suoi clip restano 7 giorni e poi vengono scartati.
 - Tutte le impostazioni sono elencate in `.env.example`.
+
+---
+
+## Dove vanno le registrazioni
+
+Di default il video del giorno va su YouTube. Puoi mandarlo altrove:
+
+| Destinazione | `STORAGE` | Cosa serve |
+|---|---|---|
+| YouTube (default) | `youtube` | la configurazione Google descritta sopra |
+| WebDAV: Nextcloud, ownCloud, Synology... | `webdav` | `WEBDAV_URL`, `WEBDAV_USER`, `WEBDAV_PASS` (per Nextcloud con autenticazione a due fattori, una password per app), facoltativo `WEBDAV_FOLDER` |
+| Una cartella sulla macchina che esegue il programma | `local` | `LOCAL_ROOT` |
+| Tutto ciò che supporta rclone: Mega, storage compatibili S3 (Backblaze B2, Wasabi, MinIO), Dropbox, OneDrive... | `rclone` | il programma `rclone`, un remote creato con `rclone config`, `RCLONE_REMOTE` (facoltativi `RCLONE_CONFIG`, `RCLONE_FOLDER`) |
+
+Imposta le variabili nel `.env` (sono tutte elencate in `.env.example`) e riavvia. I video sono salvati come
+`<cartella>/Tapo AAAA-MM-GG/<titolo>.mp4`, con i capitoli in un file `.chapters.txt` accanto a ognuno. Il file viene
+scritto con un nome temporaneo e rinominato a upload finito, quindi un upload interrotto non sembra mai completo, e
+i clip restano sulla macchina finché l'upload non riesce. Vale per la modalità a movimento (`tapo_motion.py`); la
+modalità continua (`tapo_uploader.py`) usa sempre YouTube.
+
+**Mega** funziona tramite il backend `mega` di rclone. L'autore **non l'ha provato**: Mega non offre un'API ufficiale
+per questo uso, quindi leggi la documentazione di rclone per i suoi limiti prima di farci affidamento.
+
+**In modalità multi-account** il server sceglie il default (`STORAGE` e le variabili `STORAGE_*`) e ogni utente lo
+ottiene senza fare nulla, anche senza accedere con Nextcloud. Le destinazioni che stanno sul server (WebDAV, cartella,
+rclone) hanno una sotto-cartella per ogni camera, così nessuno vede i video di un altro. Con `ALLOW_OWN_STORAGE=1`
+ogni utente può scegliere, nella pagina **Recordings**, YouTube o il proprio WebDAV (`STORAGE_ALLOWED` restringe la
+scelta; l'indirizzo deve essere pubblico e `https`). `local` e `rclone` sono solo per il server, di proposito: un
+percorso o una configurazione rclone scelti da un utente gli darebbero accesso al server stesso. Se una scelta salvata
+non è più permessa, si usa il default del server e la pagina lo dice. Solo YouTube consuma la quota condivisa. Con una
+destinazione sul server **il server conserva i video**: pianifica lo spazio disco e chi può leggerli.
+
+**Guardare:** in modalità multi-account la pagina personale mostra ogni video come una card con due azioni.
+**Watch here** (Guarda qui) apre un player nella pagina (il player incorporato di YouTube, oppure l'app stessa che invia il
+file, con la possibilità di scorrere, solo al suo proprietario). **Open the video** (Vai al video) porta al video su
+YouTube o al file nel tuo cloud (niente per cartella locale o rclone). L'audio viene convertito in AAC durante la
+registrazione e il video è copiato così com'è: tieni la camera su H.264, perché i file H.265 potrebbero non partire in
+alcuni browser.
 
 ---
 

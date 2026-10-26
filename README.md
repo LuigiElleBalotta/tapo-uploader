@@ -54,6 +54,7 @@ container.
 - [6. Final check](#6-final-check)
 - [Motion mode: one video per day](#motion-mode-one-video-per-day)
 - [Multi-account mode](#multi-account-mode)
+- [Where the recordings go](#where-the-recordings-go)
 - [Daily use](#daily-use)
 - [Configuration](#configuration)
 - [Under the hood](#under-the-hood)
@@ -631,6 +632,44 @@ motion events; only then does recording start.
 - A deactivated user's data and tokens are deleted after `RETENTION_DAYS` (30). If someone's YouTube link is
   missing or revoked, their clips are kept for 7 days and then discarded.
 - Every setting is listed in `.env.example`.
+
+---
+
+## Where the recordings go
+
+By default the daily video goes to YouTube. You can send it somewhere else:
+
+| Destination | `STORAGE` | What it needs |
+|---|---|---|
+| YouTube (default) | `youtube` | the Google setup above |
+| WebDAV: Nextcloud, ownCloud, Synology... | `webdav` | `WEBDAV_URL`, `WEBDAV_USER`, `WEBDAV_PASS` (for Nextcloud with two-factor, an app password), optional `WEBDAV_FOLDER` |
+| A folder on the machine running the program | `local` | `LOCAL_ROOT` |
+| Anything rclone supports: Mega, S3-compatible storage (Backblaze B2, Wasabi, MinIO), Dropbox, OneDrive... | `rclone` | the `rclone` program, a remote created with `rclone config`, `RCLONE_REMOTE` (optional `RCLONE_CONFIG`, `RCLONE_FOLDER`) |
+
+Set the variables in `.env` (they are all listed in `.env.example`) and restart. The videos are stored as
+`<folder>/Tapo YYYY-MM-DD/<title>.mp4`, with the chapters in a `.chapters.txt` file next to each. A file is written
+under a temporary name and renamed when it is complete, so an interrupted upload never looks finished, and the
+clips stay on the machine until the upload succeeds. This applies to the motion mode (`tapo_motion.py`); the
+continuous mode (`tapo_uploader.py`) always uses YouTube.
+
+**Mega** works through rclone's `mega` backend. The author has **not tested it**: Mega offers no official API for
+this, so read rclone's documentation for its limits before relying on it.
+
+**In multi-account mode** the server chooses the default (`STORAGE` and the `STORAGE_*` variables) and every user
+gets it without doing anything, even without signing in with Nextcloud. Destinations that live on the server
+(WebDAV, folder, rclone) get one sub-folder per camera, so nobody can see another person's videos. With
+`ALLOW_OWN_STORAGE=1` each user can pick, on the **Recordings** page, YouTube or their own WebDAV
+(`STORAGE_ALLOWED` narrows the choice; the address must be public and `https`). `local` and `rclone` are
+server-only on purpose: a path or an rclone configuration chosen by a user would give them access to the server
+itself. If a saved choice stops being allowed, the server default is used and the page says so. Only YouTube
+spends the shared quota. With a server-hosted destination the **server stores the footage**: plan the disk space
+and who can read it.
+
+**Watching:** in multi-account mode the personal page shows every video as a card with two actions. **Watch here**
+opens a player on the page (YouTube's embedded player, or the app itself streaming the file, with seeking, only to
+its owner). **Open the video** goes to the video on YouTube, or to the file in your own cloud (nothing for a local
+folder or rclone). The audio is converted to AAC while recording and the video is copied as it comes: keep the
+camera on H.264, because H.265 files may not play in some browsers.
 
 ---
 
