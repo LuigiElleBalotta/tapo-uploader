@@ -8,7 +8,7 @@ import threading
 import time
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -48,6 +48,12 @@ CREATE TABLE IF NOT EXISTS youtube_links (
     client_source TEXT NOT NULL,
     client_secret_enc TEXT,
     linked_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS storage_configs (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    config_enc TEXT,
+    updated_at REAL NOT NULL
 );
 CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY,
@@ -100,6 +106,7 @@ class Database:
             self._conn.executescript(SCHEMA)
             if self._conn.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0] == 0:
                 self._conn.execute("INSERT INTO schema_version VALUES (?)", (SCHEMA_VERSION,))
+            self._conn.execute("UPDATE schema_version SET version = ? WHERE version < ?", (SCHEMA_VERSION, SCHEMA_VERSION))
             self._conn.commit()
 
     # ----- users -----
@@ -196,6 +203,19 @@ class Database:
 
     def delete_youtube_link(self, user_id):
         self._run("DELETE FROM youtube_links WHERE user_id = ?", (user_id,))
+
+    # ----- storage destination -----
+
+    def save_storage_config(self, user_id, kind, config_enc):
+        self._run("INSERT INTO storage_configs (user_id, kind, config_enc, updated_at) VALUES (?, ?, ?, ?) "
+                  "ON CONFLICT(user_id) DO UPDATE SET kind = excluded.kind, config_enc = excluded.config_enc, "
+                  "updated_at = excluded.updated_at", (user_id, kind, config_enc, time.time()))
+
+    def storage_config(self, user_id):
+        return self._one("SELECT * FROM storage_configs WHERE user_id = ?", (user_id,))
+
+    def delete_storage_config(self, user_id):
+        self._run("DELETE FROM storage_configs WHERE user_id = ?", (user_id,))
 
     # ----- quota and events -----
 
