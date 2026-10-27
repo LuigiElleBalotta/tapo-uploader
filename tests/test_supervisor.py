@@ -249,3 +249,17 @@ def test_uploads_are_staggered_and_gated(tmp_path):
     slots = {w.ctx.name: w.ctx.upload_at for w in FakeWorker.instances}
     assert slots == {f"camera-{first}": time(21, 0), f"camera-{second}": time(21, 10)}
     assert all(w.gate is not None and w.gate.slot == w.ctx.upload_at for w in FakeWorker.instances)
+
+
+def test_coming_back_online_clears_the_offline_message_but_not_an_upload_problem(tmp_path):
+    env = make(tmp_path)
+    cid = add_camera(env, env.alice)
+    env.sup.sync()
+    report = FakeWorker.instances[0].on_status
+    report("offline", "[Errno 113] No route to host")
+    report("online", "")
+    camera = env.db.camera_for_user(env.alice, cid)
+    assert camera["status"] == "online" and camera["last_error"] is None
+    report("error", "YouTube quota exceeded")             # a problem of the upload, not of the connection
+    report("online", "")
+    assert env.db.camera_for_user(env.alice, cid)["last_error"] == "YouTube quota exceeded"

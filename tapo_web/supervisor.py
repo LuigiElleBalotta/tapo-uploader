@@ -173,7 +173,10 @@ class Supervisor:
             return
         now, detail = self.clock(), (detail or "")[:300]
         if kind == "online":
-            self.db.set_camera_status(camera_id, status="online", last_seen=now)
+            fields = {"status": "online", "last_seen": now}
+            if camera["status"] == "offline":   # the connection is back: its message is history (an upload problem stays)
+                fields["last_error"] = None
+            self.db.set_camera_status(camera_id, **fields)
         elif kind == "motion":
             self.db.set_camera_status(camera_id, last_motion=now)
             self.db.add_event(camera_id, "motion", detail, ts=now)
