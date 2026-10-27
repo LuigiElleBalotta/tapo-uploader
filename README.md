@@ -1,27 +1,29 @@
-# tapo-uploader: Tapo camera to YouTube uploader
+# tapo-uploader: record your Tapo camera on motion, keep the videos in your own storage
 
 🌐 **English** · [Italiano](README_IT.md)
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![ffmpeg](https://img.shields.io/badge/ffmpeg-no%20re--encoding-orange.svg)](https://ffmpeg.org/)
-[![YouTube Data API v3](https://img.shields.io/badge/YouTube%20Data%20API-v3-red.svg)](https://developers.google.com/youtube/v3)
+[![Storage](https://img.shields.io/badge/storage-YouTube%20%C2%B7%20OneDrive%20%C2%B7%20WebDAV%20%C2%B7%20rclone%20%C2%B7%20disk-blueviolet.svg)](#where-the-recordings-go)
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED.svg)](Dockerfile)
 
-**Record your TP-Link Tapo camera (tested on the Tapo C200) only when it detects motion, and upload
-the footage to YouTube as private videos, with one playlist per day. No cloud subscription, no
-firmware hacking, no storage to buy.**
+**A self-hosted web app that records your TP-Link Tapo camera (tested on the Tapo C200) only when it
+detects motion and keeps the videos in the storage you choose: YouTube, your own OneDrive, Nextcloud
+or any WebDAV, any rclone cloud (Mega, S3, Dropbox...) or the disk of the machine that runs it. One
+page to watch everything, whichever storage it lives in. No cloud subscription, no firmware hacking.**
 
-The Tapo C200 can't upload to YouTube or Google Drive by itself. `tapo-uploader` is a small Python
-service that pulls the camera's **RTSP** stream with **ffmpeg**, listens for **ONVIF** motion
-events, and publishes the result through the official **YouTube Data API v3**. After each upload the
-local file is deleted, so it runs for free on a Raspberry Pi, a cheap VPS, a mini PC or a Docker
-container.
+The Tapo C200 can't send its recordings to your own storage by itself. `tapo-uploader` is a small
+Python service that pulls the camera's **RTSP** stream with **ffmpeg**, listens for **ONVIF** motion
+events, and saves the result where you decide. Upload destinations can be mixed and changed at any
+time: the videos you saved earlier stay on your page, each marked with the storage it lives in. It
+runs for one person from a single `.env`, or for a group of friends with accounts, each with their
+own camera and storage. A Raspberry Pi, your own PC, a cheap VPS or a Docker container is enough.
 
 ```
- Tapo C200 ──RTSP──▶ ffmpeg ──▶ 30 s before + 5 min after each motion ──▶ one private YouTube video a day
- (home)    ──ONVIF motion events──▶                                       playlist "Tapo 2026-10-26"
-                                                                          (local files deleted after upload)
+ Tapo C200 ──RTSP──▶ ffmpeg ──▶ 30 s before + 5 min after each motion ──▶ one video a day, with chapters
+ (home)    ──ONVIF motion events──▶                                       ──▶ YouTube · OneDrive · WebDAV · rclone · disk
+                                                                              (a page to watch them all)
 ```
 
 ## Features
@@ -29,11 +31,14 @@ container.
 - **Motion-triggered recording.** Keeps 30 seconds *before* the detection and 5 minutes *after*;
   motion near the end of the window extends it. All times are configurable.
 - **One video per day.** Clips are joined without re-encoding and uploaded once a day (21:00 by
-  default), with the time of every event as YouTube chapters in the description.
+  default), with the time of every event as chapters in the description.
 - **Or continuous recording.** 6-hour segments, each uploaded as its own video.
-- **Private by default.** Videos go to your own channel as `private`, grouped in a daily playlist
-  named `Tapo YYYY-MM-DD`.
-- **Frees the disk.** Files are deleted right after a successful upload.
+- **Your storage, your choice.** YouTube (private videos, a playlist per day), your own OneDrive,
+  Nextcloud/WebDAV, any rclone cloud, or the server's disk; change it any time and nothing is lost.
+- **One page for everything.** The web app lists the videos of every storage you ever used, each marked
+  with where it lives, plays them in the page, and also shows clips still waiting for their upload.
+- **Frees the disk.** Files are deleted right after a successful upload; videos kept on the server can
+  rotate by age, by a space limit per person, or when the disk runs low.
 - **No re-encoding.** `ffmpeg -c copy`: close to zero CPU, so a Raspberry Pi is plenty.
 - **Resilient.** Restarts ffmpeg when the stream drops, retries failed uploads, handles the YouTube
   quota, survives reboots (fragmented MP4 stays playable even if killed).
@@ -46,9 +51,9 @@ container.
 - [How it works](#how-it-works)
 - [Requirements](#requirements)
 - [1. The camera](#1-the-camera)
-- [2. Google Cloud and YouTube](#2-google-cloud-and-youtube)
+- [2. Google Cloud and YouTube (only if you use YouTube)](#2-google-cloud-and-youtube)
 - [3. Install and test on your PC](#3-install-and-test-on-your-pc)
-- [Where to run it](#where-to-run-it)
+- [Where to run it](#where-to-run-it) (including [your own PC](#your-own-pc-windows-macos-linux))
 - [4. The server](#4-the-server)
 - [5. Reaching the camera from the internet](#5-reaching-the-camera-from-the-internet)
 - [6. Final check](#6-final-check)
@@ -68,7 +73,7 @@ container.
 
 ## How it works
 
-There are **two modes**. Both use the same camera, the same YouTube login and the same `.env`.
+There are **two modes**. Both use the same camera, the same storage settings and the same `.env`.
 
 | | Continuous (`tapo_uploader.py`) | Motion (`tapo_motion.py`) |
 |---|---|---|
@@ -76,14 +81,14 @@ There are **two modes**. Both use the same camera, the same YouTube login and th
 | Uploads | Each segment as soon as it closes | One video a day, at a fixed time |
 | Disk use | A few GB at most | Almost nothing (about one minute of buffer) |
 | Needs | RTSP | RTSP + ONVIF events (port 2020) |
-| YouTube quota | 4 uploads/day | 1 upload/day |
+| YouTube quota (if YouTube is the storage) | 4 uploads/day | 1 upload/day |
 
 `tapo_uploader.py run` starts two threads:
 
 1. **Recording.** ffmpeg reads the RTSP stream with `-c copy` (the video is not re-encoded) and
    writes `YYYYMMDD_HHMMSS.mp4` files into `recordings/`. Cuts are aligned to the wall clock: with
    6-hour segments they close at 00:00, 06:00, 12:00 and 18:00. If the stream drops, ffmpeg restarts.
-2. **Upload.** Every minute it looks for finished segments, uploads them as `private` videos titled
+2. **Upload.** Every minute it looks for finished segments, sends them to the storage you chose (on YouTube as `private` videos) titled
    `Tapo YYYY-MM-DD HH:MM-HH:MM`, adds them to the playlist `Tapo YYYY-MM-DD` (created if missing)
    and **deletes the file**. If an upload fails the file stays and is retried.
 
@@ -96,7 +101,7 @@ Pi or mini PC at home, a VPS, or a container host.
 |---|---|
 | A Tapo camera with RTSP | Tested on the **Tapo C200**. You need the "Camera Account" (step 1). |
 | An always-on computer | Linux recommended (VPS, Raspberry Pi). Python 3.10+ and ffmpeg. |
-| A Google account with a YouTube channel | The videos land in its channel. |
+| Somewhere to keep the videos | A YouTube channel (a Google account), a OneDrive, a Nextcloud/WebDAV, an rclone cloud, or just the disk. |
 | Router access (only if the server is not at home) | To open a port towards the camera. |
 
 Disk: at 640×360 a 6-hour segment is about 0.4 GB. A few free GB are enough because files are
@@ -132,6 +137,9 @@ Other ONVIF cameras that expose RTSP may work, but only the Tapo C200 has been t
 ---
 
 ## 2. Google Cloud and YouTube
+
+> **Only if you want YouTube as the storage.** For OneDrive, Nextcloud/WebDAV, rclone or the disk skip to
+> [3](#3-install-and-test-on-your-pc) and follow the [storage setup guide](https://luigiellebalotta.github.io/tapo-uploader/storage-guide.html).
 
 The script uploads to your channel through the official YouTube Data API v3, so you need a small
 Google "project" that identifies the app. It is free.
@@ -205,7 +213,9 @@ pip install -r requirements.txt
 cp .env.example .env            # then fill in CAMERA_USER, CAMERA_PASS, CAMERA_HOST
 ```
 
-Put `client_secret.json` (step 2.3) in the folder, then:
+Choose where the videos go first (see [Where the recordings go](#where-the-recordings-go); to try it with no account at all use
+`STORAGE=local` and `LOCAL_ROOT=/some/folder` in `.env`). **If you use YouTube**, put `client_secret.json` (step 2.3) in the
+folder, then:
 
 ```bash
 python tapo_uploader.py check   # 1. does the camera answer? prints codec and resolution
@@ -232,7 +242,8 @@ The program must stay on 24/7 and be able to reach the camera. The options, simp
 
 | Where | Rough cost | How it reaches the camera | Notes |
 |---|---|---|---|
-| **Raspberry Pi / mini PC at home** | one-off, about $15–50 | LAN | **Recommended**: no port forwarding, no DDNS, no exposed camera. |
+| **Your own PC** (Windows, macOS, Linux) | free | LAN | Fine if it stays on and awake. No port forwarding. See [below](#your-own-pc-windows-macos-linux). |
+| **Raspberry Pi / mini PC at home** | one-off, about $15–50 | LAN | **Recommended**: always on, no port forwarding, no DDNS, no exposed camera. |
 | **VPS** (as in this guide) | a few dollars a month | port forwarding limited to the VPS's fixed IP | Steps 4 and 5. This is the tested setup. |
 | **Render** (Background Worker) | about $7/month, plus $0.25/GB of disk | port forwarding to Render's shared IPs | Docker image included, **not tested**. See below. |
 | **Render free** (web service) | $0 | port forwarding to Render's shared IPs | Tested up to startup, not with the camera. Ephemeral disk: clips can be lost. See below. |
@@ -240,6 +251,27 @@ The program must stay on 24/7 and be able to reach the camera. The options, simp
 
 Other container platforms (Fly.io, Railway) follow the same pattern as Render: the `Dockerfile`
 works anywhere, only prices and networking change.
+
+### Your own PC (Windows, macOS, Linux)
+
+Yes, a personal computer works, with one condition: it must **stay on, awake and on the same network as the
+camera**, because it records only while the program runs. A laptop that sleeps in the evening will miss the
+motion. Nothing is opened on the router. A short version (the full, illustrated-by-commands guide is the
+[PC install guide](https://luigiellebalotta.github.io/tapo-uploader/pc-guide.html)):
+
+1. Create the Camera Account in the Tapo app (step 1) and note the camera's IP address (ask the router to always give it the same one).
+2. Install the tools. Windows (PowerShell): `winget install Python.Python.3.12`, `winget install Gyan.FFmpeg`,
+   `winget install Git.Git`. macOS: `brew install python ffmpeg git`. Linux: `sudo apt install python3 python3-venv ffmpeg git`.
+3. `git clone https://github.com/LuigiElleBalotta/tapo-uploader.git`, `cd tapo-uploader`, `python -m venv .venv`, activate it
+   (`.venv\Scripts\Activate.ps1` on Windows, `. .venv/bin/activate` elsewhere) and `pip install -r requirements.txt`.
+4. Copy `.env.example` to `.env` and set `CAMERA_HOST`, `CAMERA_USER`, `CAMERA_PASS`. To keep the videos on the PC:
+   `STORAGE=local` and `LOCAL_ROOT=C:\Tapo` (or `/home/you/Tapo`). Other storages: see
+   [Where the recordings go](#where-the-recordings-go).
+5. `python tapo_uploader.py check`, then `python tapo_motion.py run`.
+6. Keep it running: turn off sleep (and "close the lid" actions on a laptop), and start it at login (Windows Task Scheduler,
+   a macOS login item, or a systemd service on Linux).
+
+With Docker Desktop you can skip Python and ffmpeg and use the [published image](#docker-image).
 
 ### Render (paid Background Worker)
 
@@ -844,9 +876,13 @@ at midnight Pacific Time.
 
 ## FAQ
 
-**Can a Tapo C200 upload to YouTube?**
-Not by itself. The camera has no YouTube or Google Drive option. This project adds it from outside:
-a small service reads the camera's RTSP stream and uploads with the official YouTube API.
+**Can a Tapo C200 save its videos to my own storage?**
+Not by itself. The camera has no YouTube, OneDrive or Google Drive option. This project adds it from outside:
+a small service reads the camera's RTSP stream, records around motion and saves the result where you choose
+(YouTube through its official API, OneDrive, Nextcloud/WebDAV, an rclone cloud or a disk).
+
+**Can I use my own computer?**
+Yes, if it stays on, awake and on the same network as the camera. See [Your own PC](#your-own-pc-windows-macos-linux).
 
 **Do I need to flash custom firmware or root the camera?**
 No. The stock firmware already exposes RTSP and ONVIF once you create the *Camera Account* in the

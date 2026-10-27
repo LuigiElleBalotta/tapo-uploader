@@ -1,14 +1,20 @@
-# tapo-uploader: dalla telecamera Tapo a YouTube
+# tapo-uploader: registra la tua telecamera Tapo sul movimento e tieni i video nel tuo storage
 
 🌐 [English](README.md) · **Italiano**
 
-Registra lo stream di una telecamera **TP-Link Tapo** (testato su C200) e carica da solo i
-video su **YouTube come privati**, con una **playlist per ogni giorno**. Dopo l'upload il file
+Una **web app che puoi ospitare tu**: registra lo stream di una telecamera **TP-Link Tapo** (testato su
+C200) solo quando rileva movimento e tiene i video nello **storage che scegli**: **YouTube** (video privati,
+una playlist al giorno), il tuo **OneDrive**, **Nextcloud** o un qualsiasi WebDAV, un cloud qualsiasi tramite
+**rclone** (Mega, S3, Dropbox...) o il **disco** della macchina che la fa girare. Una sola pagina per
+guardare tutto, in qualunque storage si trovi. Puoi cambiare storage quando vuoi: i video salvati prima
+restano nella pagina, ognuno segnato con il suo storage. Funziona per una persona (basta un `.env`) o per un
+gruppo di amici con account, ciascuno con la propria camera e il proprio storage. Dopo l'upload il file
 viene cancellato dal disco.
 
 ```
- Tapo C200 ──RTSP──▶ ffmpeg ──▶ segmenti .mp4 ──▶ YouTube API ──▶ playlist "Tapo 2026-10-26"
- (casa)                        (cartella recordings/)             (video privati, file cancellato)
+ Tapo C200 ──RTSP──▶ ffmpeg ──▶ 30 s prima + 5 min dopo ogni movimento ──▶ un video al giorno, con capitoli
+ (casa)    ──eventi ONVIF──▶                                              ──▶ YouTube · OneDrive · WebDAV · rclone · disco
+                                                                              (una pagina per guardarli tutti)
 ```
 
 Ci sono **due modalità**: la registrazione continua a segmenti (`tapo_uploader.py`, descritta
@@ -21,9 +27,9 @@ setup completo, passo per passo, com'è stato fatto davvero, compresi i problemi
 
 - [Cosa fa e cosa serve](#cosa-fa-e-cosa-serve)
 - [1. La telecamera](#1-la-telecamera)
-- [2. Google Cloud e YouTube](#2-google-cloud-e-youtube)
+- [2. Google Cloud e YouTube (solo se usi YouTube)](#2-google-cloud-e-youtube)
 - [3. Installazione e prova sul tuo PC](#3-installazione-e-prova-sul-tuo-pc)
-- [Dove farlo girare](#dove-farlo-girare)
+- [Dove farlo girare](#dove-farlo-girare) (anche [sul tuo PC](#sul-tuo-pc-windows-macos-linux))
 - [4. Il server](#4-il-server)
 - [5. Raggiungere la camera da internet](#5-raggiungere-la-camera-da-internet)
 - [6. Verifica finale](#6-verifica-finale)
@@ -90,6 +96,9 @@ perché i file vengono cancellati dopo l'upload.
 ---
 
 ## 2. Google Cloud e YouTube
+
+> **Solo se vuoi YouTube come storage.** Per OneDrive, Nextcloud/WebDAV, rclone o il disco passa al [passo 3](#3-installazione-e-prova-sul-tuo-pc)
+> e segui la [guida alla configurazione degli storage](https://luigiellebalotta.github.io/tapo-uploader/storage-guide.html) (in inglese).
 
 Lo script carica sul tuo canale con l'API ufficiale (YouTube Data API v3), quindi serve un
 piccolo "progetto" Google che identifichi l'app. È gratis.
@@ -165,7 +174,9 @@ pip install -r requirements.txt
 cp .env.example .env            # poi compila CAMERA_USER, CAMERA_PASS, CAMERA_HOST
 ```
 
-Metti `client_secret.json` (passo 2.3) nella cartella, poi:
+Scegli prima dove vanno i video (vedi [Dove vanno le registrazioni](#dove-vanno-le-registrazioni); per provare senza alcun account usa
+`STORAGE=local` e `LOCAL_ROOT=/una/cartella` nel `.env`). **Se usi YouTube**, metti `client_secret.json` (passo 2.3) nella
+cartella, poi:
 
 ```bash
 python tapo_uploader.py check   # 1. la camera risponde? mostra codec e risoluzione
@@ -194,6 +205,7 @@ dalla più semplice:
 
 | Dove | Costo indicativo | Come raggiunge la camera | Note |
 |---|---|---|---|
+| **Il tuo PC** (Windows, macOS, Linux) | gratis | in LAN | Va bene se resta acceso e sveglio. Niente port forwarding. Vedi [sotto](#sul-tuo-pc-windows-macos-linux). |
 | **Raspberry Pi / mini PC in casa** | una tantum, 15–50 € | in LAN | **Consigliato**: niente port forwarding, niente DDNS, niente IP da proteggere. |
 | **VPS** (come in questa guida) | pochi euro al mese | port forwarding limitato all'IP fisso del VPS | Passi 4 e 5. È la configurazione collaudata. |
 | **Render** (Background Worker) | da circa 7 $/mese, più 0,25 $/GB di disco | port forwarding verso gli IP condivisi di Render | Immagine Docker inclusa, **non collaudata**. Vedi sotto. |
@@ -202,6 +214,27 @@ dalla più semplice:
 
 Le altre piattaforme con container (Fly.io, Railway) seguono lo stesso schema di Render: il
 `Dockerfile` funziona ovunque, cambiano prezzi e rete.
+
+### Sul tuo PC (Windows, macOS, Linux)
+
+Sì, un computer personale va bene, a una condizione: deve **restare acceso, sveglio e sulla stessa rete della
+camera**, perché registra solo mentre il programma gira. Un portatile che va in stop la sera perde i
+movimenti. Sul router non si apre nulla. Versione breve (la guida completa, comando per comando, è la
+[guida all'installazione sul PC](https://luigiellebalotta.github.io/tapo-uploader/pc-guide.html), in inglese):
+
+1. Crea il Camera Account nell'app Tapo (passo 1) e annota l'indirizzo IP della camera (fai assegnare sempre lo stesso dal router).
+2. Installa gli strumenti. Windows (PowerShell): `winget install Python.Python.3.12`, `winget install Gyan.FFmpeg`,
+   `winget install Git.Git`. macOS: `brew install python ffmpeg git`. Linux: `sudo apt install python3 python3-venv ffmpeg git`.
+3. `git clone https://github.com/LuigiElleBalotta/tapo-uploader.git`, `cd tapo-uploader`, `python -m venv .venv`, attivalo
+   (`.venv\Scripts\Activate.ps1` su Windows, `. .venv/bin/activate` altrove) e `pip install -r requirements.txt`.
+4. Copia `.env.example` in `.env` e imposta `CAMERA_HOST`, `CAMERA_USER`, `CAMERA_PASS`. Per tenere i video sul PC:
+   `STORAGE=local` e `LOCAL_ROOT=C:\Tapo` (oppure `/home/tu/Tapo`). Gli altri storage: vedi
+   [Dove vanno le registrazioni](#dove-vanno-le-registrazioni).
+5. `python tapo_uploader.py check`, poi `python tapo_motion.py run`.
+6. Tienilo in funzione: disattiva lo stop (e l'azione "chiudi il coperchio" su un portatile) e avvialo all'accesso
+   (Utilità di pianificazione su Windows, un elemento di login su macOS, un servizio systemd su Linux).
+
+Con Docker Desktop puoi saltare Python e ffmpeg e usare l'[immagine pubblicata](#immagine-docker).
 
 ### Render
 

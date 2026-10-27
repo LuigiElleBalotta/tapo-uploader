@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <title>tapo-uploader: install it on your own PC</title>
+  <meta name="description" content="Step-by-step guide to run tapo-uploader on your own Windows, macOS or Linux computer: install the tools, connect the camera, choose where the videos go, and keep it running.">
+  <link rel="canonical" href="https://luigiellebalotta.github.io/tapo-uploader/pc-guide.html">
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <link rel="stylesheet" href="assets/vendor/now-ui-kit/css/bootstrap.min.css">
+  <link rel="stylesheet" href="assets/vendor/now-ui-kit/css/now-ui-kit.css">
+  <link rel="stylesheet" href="assets/site.css">
+  <style>
+    .policy-hero { padding: 7rem 0 3rem; }
+    .policy-hero h1 { font-size: 2.2rem; }
+    .policy h2 { font-size: 1.45rem; font-weight: 700; margin-top: 2.5rem; }
+    .policy h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.5rem; }
+    .policy p, .policy li { font-size: 1.05rem; line-height: 1.7; }
+    .policy pre { padding: 0.8rem 1rem; overflow-x: auto; }
+    .policy .toc a { margin-right: 1rem; white-space: nowrap; }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg fixed-top site-nav scrolled" aria-label="Main">
+    <div class="container">
+      <a class="navbar-brand" href="index.html">tapo-uploader</a>
+      <a class="btn btn-primary btn-round btn-sm" href="index.html#run">Back</a>
+    </div>
+  </nav>
+
+  <header class="hero policy-hero">
+    <div class="container">
+      <p class="eyebrow">tapo-uploader</p>
+      <h1>Install it on your own PC</h1>
+    </div>
+  </header>
+
+  <main class="section">
+    <div class="container policy">
+      <div class="row"><div class="col-lg-9">
+        <p>Yes, you can use your own computer: Windows, macOS or Linux. There is one condition: <strong>it must stay on, awake, and connected to the same network (Wi-Fi or cable) as the camera</strong>, because the program records only while it is running. A laptop that sleeps or is closed in the evening will miss the motion it should have recorded. If that does not suit you, a spare mini PC, a Raspberry Pi or a small server is a better home for it.</p>
+        <p>Because the PC and the camera are on the same network, you do not open any port on the router and nothing is exposed to the internet.</p>
+        <p class="toc"><a href="#before">Before you start</a> <a href="#tools">1. Tools</a> <a href="#program">2. The program</a> <a href="#settings">3. Settings</a> <a href="#test">4. Test</a> <a href="#run">5. Run it</a> <a href="#always">6. Keep it running</a> <a href="#docker">Docker</a> <a href="#problems">Problems</a></p>
+
+        <h2 id="before">Before you start</h2>
+        <ol>
+          <li><strong>The camera account.</strong> In the Tapo app open the camera, <em>Settings → Advanced → Camera Account</em> and create a username and password just for the camera (not your Tapo login).</li>
+          <li><strong>The camera's address.</strong> Find its IP address in the Tapo app (<em>Device Info</em>) or in your router, for example <code>192.168.1.50</code>. Ask the router to always give it the same address (DHCP reservation), or the program will lose it after a reboot.</li>
+          <li><strong>Where the videos go.</strong> The simplest choice needs no account at all: keep them on this PC's disk. Others (YouTube, OneDrive, Nextcloud...) are in the <a href="storage-guide.html">storage guide</a>.</li>
+        </ol>
+
+        <h2 id="tools">1. Install the tools</h2>
+        <p>You need three programs: Python (3.10 or newer), ffmpeg (records the video) and git (downloads the program).</p>
+        <h3>Windows</h3>
+        <p>Open <strong>PowerShell</strong> (Start menu, type PowerShell) and run:</p>
+<pre>winget install Python.Python.3.12
+winget install Gyan.FFmpeg
+winget install Git.Git</pre>
+        <p>Close PowerShell and open it again, then check: <code>python --version</code> and <code>ffmpeg -version</code> must both answer.</p>
+        <h3>macOS</h3>
+        <p>In Terminal, with <a href="https://brew.sh">Homebrew</a>: <code>brew install python ffmpeg git</code></p>
+        <h3>Linux (Debian, Ubuntu, Raspberry Pi OS)</h3>
+<pre>sudo apt update
+sudo apt install python3 python3-venv ffmpeg git</pre>
+
+        <h2 id="program">2. Get the program</h2>
+<pre>git clone https://github.com/LuigiElleBalotta/tapo-uploader.git
+cd tapo-uploader
+python -m venv .venv</pre>
+        <p>Then activate the environment and install what the program needs:</p>
+<pre># Windows (PowerShell)
+.venv\Scripts\Activate.ps1
+# macOS / Linux
+. .venv/bin/activate
+
+pip install -r requirements.txt</pre>
+        <p class="text-muted">On Windows, if PowerShell refuses to run the activation script, run <code>Set-ExecutionPolicy -Scope Process Bypass</code> first (it only lasts for that window).</p>
+
+        <h2 id="settings">3. Tell it about your camera</h2>
+        <p>Copy the example settings file and open it in a text editor (Notepad is fine):</p>
+<pre># Windows
+copy .env.example .env
+notepad .env
+# macOS / Linux
+cp .env.example .env</pre>
+        <p>Fill in the three lines about the camera, with the address and the camera account from "Before you start":</p>
+<pre>CAMERA_HOST=192.168.1.50
+CAMERA_USER=the-camera-account
+CAMERA_PASS=its-password</pre>
+        <p>To keep the videos on this PC (no account needed), also add:</p>
+<pre>STORAGE=local
+LOCAL_ROOT=C:\Tapo        # Windows. On macOS or Linux: /home/you/Tapo</pre>
+        <p>The videos then appear in folders named <code>Tapo YYYY-MM-DD</code> inside that path. For YouTube, OneDrive, Nextcloud or another cloud, follow the <a href="storage-guide.html">storage guide</a> instead.</p>
+
+        <h2 id="test">4. Test</h2>
+<pre>python tapo_uploader.py check</pre>
+        <p>It must print the camera's video type (<code>h264</code>) and size. <code>401 Unauthorized</code> means the camera account is wrong; <code>Operation not permitted</code> means another program (or the Tapo app's live view) is using the stream. To see the motion events the camera sends, wave at it while running <code>python tapo_motion.py listen 60</code>.</p>
+
+        <h2 id="run">5. Run it</h2>
+<pre>python tapo_motion.py run</pre>
+        <p>It now records 30 seconds before and 5 minutes after every motion, and once a day (21:00 by default, change it with <code>UPLOAD_AT</code>) joins the clips into one video and saves it. Leave the window open; <code>Ctrl+C</code> stops it.</p>
+
+        <h2 id="always">6. Keep it running</h2>
+        <h3>Do not let the PC sleep</h3>
+        <ul>
+          <li><strong>Windows:</strong> Settings → System → Power → Screen and sleep → set "When plugged in, put my device to sleep after" to <em>Never</em>. For a laptop also set "closing the lid" to <em>Do nothing</em> (Control Panel → Power Options → Choose what closing the lid does).</li>
+          <li><strong>macOS:</strong> System Settings → Battery/Energy → prevent automatic sleeping when the display is off; or start the program with <code>caffeinate -i python tapo_motion.py run</code>.</li>
+          <li><strong>Linux:</strong> disable suspend in the power settings.</li>
+        </ul>
+        <h3>Start it by itself</h3>
+        <ul>
+          <li><strong>Windows:</strong> open <em>Task Scheduler → Create Task</em>, trigger "At log on", action "Start a program" with <code>Program</code> = the full path to <code>.venv\Scripts\python.exe</code>, <code>Arguments</code> = <code>tapo_motion.py run</code>, <code>Start in</code> = the program folder.</li>
+          <li><strong>macOS:</strong> add a login item (or a launchd agent) that runs the same command from the program folder.</li>
+          <li><strong>Linux:</strong> a systemd service, as in <a href="https://github.com/LuigiElleBalotta/tapo-uploader#systemd-service">the README</a>.</li>
+        </ul>
+        <p>If the Wi-Fi drops for a moment, the program reconnects on its own.</p>
+
+        <h2 id="docker">If you prefer Docker</h2>
+        <p>With Docker Desktop (Windows, macOS) or Docker on Linux you can skip Python and ffmpeg: a ready-made image is published for every release. See <a href="https://github.com/LuigiElleBalotta/tapo-uploader#docker-image">the README</a> for the command.</p>
+
+        <h2 id="problems">If something does not work</h2>
+        <ul>
+          <li><strong><code>python</code> or <code>ffmpeg</code> is "not recognized":</strong> close and reopen the terminal after installing; on Windows make sure the installer added them to the PATH.</li>
+          <li><strong>The camera does not answer:</strong> the PC must be on the same network; check the address in the Tapo app, and that the camera account (not the Tapo login) is used.</li>
+          <li><strong>It stops when I close the lid or log out:</strong> see "Do not let the PC sleep" and "Start it by itself".</li>
+          <li><strong>Antivirus or firewall warnings:</strong> allow Python and ffmpeg to use the local network.</li>
+          <li><strong>I want several people or a page to watch the videos:</strong> that is the multi-account web app; see <a href="https://github.com/LuigiElleBalotta/tapo-uploader#multi-account-mode">the README</a>. It also runs on a PC, and you open it at <code>http://localhost:8080</code>.</li>
+        </ul>
+
+        <p><a href="index.html#run">Back</a></p>
+      </div></div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>MIT licensed. Page built with <a href="https://github.com/creativetimofficial/now-ui-kit">Now UI Kit</a> (MIT, Creative Tim). <a href="index.html">Home</a> · <a href="storage-guide.html">Storage setup</a> · <a href="privacy.html">Privacy policy</a></p>
+    </div>
+  </footer>
+</body>
+</html>

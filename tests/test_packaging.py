@@ -113,3 +113,25 @@ def test_guide_names_match_the_settings_the_code_reads():
     for name in ("MS_CLIENT_ID", "MS_CLIENT_SECRET", "MS_TENANT", "STORAGE_RCLONE_REMOTE", "STORAGE_LOCAL_ROOT",
                  "STORAGE_WEBDAV_URL", "YOUTUBE_CLIENT_SECRET_JSON", "ALLOW_OWN_STORAGE"):
         assert name in guide and name in settings, name
+
+
+def test_pc_guide_is_complete_linked_and_asset_free():
+    guide = read("pc-guide.html")
+    for needed in ("winget install Python", "winget install Gyan.FFmpeg", "brew install", "apt install", "CAMERA_HOST",
+                   "tapo_uploader.py check", "tapo_motion.py run", "STORAGE=local", "Task Scheduler", "caffeinate",
+                   "same network", "storage-guide.html"):
+        assert needed in guide, needed
+    own = "https://luigiellebalotta.github.io/tapo-uploader/"
+    refs = re.findall(r'<(?:link|script|img)\b[^>]*?(?:href|src)="([^"]+)"', guide)
+    assert refs and not [r for r in refs if re.match(r"^(https?:)?//", r) and not r.startswith(own)]
+    assert 'href="pc-guide.html"' in read("index.html") and "pc-guide.html" in read("sitemap.xml")
+    for readme in ("README.md", "README_IT.md"):
+        assert "pc-guide.html" in read(readme)
+
+
+def test_the_project_is_not_presented_as_youtube_only():
+    index, readme, readme_it = read("index.html"), read("README.md"), read("README_IT.md")
+    assert "saved to your own YouTube" not in index and "private YouTube videos</strong>, one playlist" not in index
+    assert "Tapo camera to YouTube uploader" not in readme and "dalla telecamera Tapo a YouTube" not in readme_it
+    for text in (index, readme, readme_it):
+        assert "OneDrive" in text and "WebDAV" in text
