@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-  <title>tapo-uploader: record a Tapo camera on motion and upload to private YouTube</title>
-  <meta name="description" content="Open-source Python tool: records a TP-Link Tapo camera (tested on the Tapo C200) only on motion with ffmpeg and ONVIF, and uploads private videos to your own YouTube channel, one playlist per day. No cloud subscription. Runs on a Raspberry Pi, VPS or Docker, for one person or a group of friends.">
+  <title>tapo-uploader: record a Tapo camera on motion and upload to YouTube, OneDrive or your own cloud</title>
+  <meta name="description" content="Open-source Python tool: records a TP-Link Tapo camera (tested on the Tapo C200) only on motion with ffmpeg and ONVIF, and uploads private videos to your own YouTube channel, OneDrive, WebDAV (Nextcloud) or any rclone cloud, one folder or playlist per day, with a page to watch them. No cloud subscription. Runs on a Raspberry Pi, VPS or Docker, for one person or a group of friends.">
   <meta name="keywords" content="Tapo C200, Tapo camera, YouTube upload, motion detection, ONVIF, RTSP, ffmpeg, private YouTube video, Raspberry Pi, self-hosted, no cloud subscription">
   <meta name="author" content="Luigi Elle Balotta">
   <meta name="theme-color" content="#1f1b2e">
@@ -13,14 +13,14 @@
 
   <meta property="og:type" content="website">
   <meta property="og:title" content="tapo-uploader: Tapo camera to private YouTube, recorded on motion">
-  <meta property="og:description" content="Records your Tapo camera only on motion and uploads one private video a day to your own YouTube channel. Free, open source, no subscription.">
+  <meta property="og:description" content="Records your Tapo camera only on motion and uploads one video a day to your own YouTube, OneDrive or cloud. Watch it from a web page. Free, open source, no subscription.">
   <meta property="og:url" content="https://luigiellebalotta.github.io/tapo-uploader/">
   <meta property="og:image" content="https://luigiellebalotta.github.io/tapo-uploader/assets/og-image.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="tapo-uploader: Tapo camera to private YouTube, recorded on motion">
-  <meta name="twitter:description" content="Records your Tapo camera only on motion and uploads one private video a day to your own YouTube channel.">
+  <meta name="twitter:description" content="Records your Tapo camera only on motion and uploads one video a day to your own YouTube, OneDrive or cloud.">
   <meta name="twitter:image" content="https://luigiellebalotta.github.io/tapo-uploader/assets/og-image.png">
 
   <script type="application/ld+json">
@@ -28,7 +28,7 @@
     "@context": "https://schema.org",
     "@type": "SoftwareSourceCode",
     "name": "tapo-uploader",
-    "description": "Records a TP-Link Tapo camera on motion with ffmpeg and ONVIF and uploads private videos to the user's own YouTube channel, one playlist per day.",
+    "description": "Records a TP-Link Tapo camera on motion with ffmpeg and ONVIF and uploads the videos to the user's own YouTube channel, OneDrive, WebDAV or rclone cloud, one playlist or folder per day.",
     "codeRepository": "https://github.com/LuigiElleBalotta/tapo-uploader",
     "programmingLanguage": "Python",
     "license": "https://opensource.org/licenses/MIT",
@@ -103,9 +103,9 @@
           <span class="mi flow-arrow" aria-hidden="true">arrow_forward</span>
           <div class="flow-step"><span class="mi" aria-hidden="true">sensors</span><h3>Motion</h3><p>Keeps a short ring buffer: 30 s before the trigger, 5 min after.</p></div>
           <span class="mi flow-arrow" aria-hidden="true">arrow_forward</span>
-          <div class="flow-step"><span class="mi" aria-hidden="true">cloud_upload</span><h3>Upload</h3><p>Once a day, the clips become one private video on your channel.</p></div>
+          <div class="flow-step"><span class="mi" aria-hidden="true">cloud_upload</span><h3>Upload</h3><p>Once a day, the clips become one video on your YouTube, OneDrive or cloud.</p></div>
           <span class="mi flow-arrow" aria-hidden="true">arrow_forward</span>
-          <div class="flow-step"><span class="mi" aria-hidden="true">playlist_play</span><h3>Playlist</h3><p>One playlist per day, event times as chapters. Files are deleted.</p></div>
+          <div class="flow-step"><span class="mi" aria-hidden="true">playlist_play</span><h3>Playlist</h3><p>One playlist or folder per day, event times as chapters. Files are deleted.</p></div>
         </div>
       </div>
     </section>
@@ -120,6 +120,9 @@
           <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">delete_outline</span><h3>Frees the disk</h3><p>Each file is deleted right after a successful upload. A few GB of space are enough.</p></div></div>
           <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">verified_user</span><h3>Resilient</h3><p>Restarts ffmpeg when the stream drops, retries uploads, respects the YouTube quota, and never logs your camera password.</p></div></div>
           <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">schedule</span><h3>Two modes</h3><p>Motion mode uploads one video a day. Continuous mode records 6-hour segments.</p></div></div>
+          <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">play_circle</span><h3>Watch before it is uploaded</h3><p>Clips still waiting for the daily upload show on your page, marked <em>Not uploaded yet</em>, and play right there.</p></div></div>
+          <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">history</span><h3>Change storage, lose nothing</h3><p>Switch from YouTube to OneDrive and the old videos stay on your page. Every video is marked with where it lives.</p></div></div>
+          <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">inventory_2</span><h3>Ready-made image</h3><p>A Docker image is published for you on every release (amd64 and arm64): pull it, no build on your server.</p></div></div>
         </div>
       </div>
     </section>
@@ -131,7 +134,7 @@
         <p class="section-lead">Turn on multi-account mode and several trusted people share the same server. Everyone links their own camera and their own YouTube channel, and sees only their own videos. Leave it off and nothing changes.</p>
         <div class="row">
           <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">groups</span><h3>Everyone gets a page</h3><p>Camera status, last motion, last upload and the daily playlists of their own YouTube channel, in one place.</p></div></div>
-          <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">smart_display</span><h3>Their own channel</h3><p>Uploads go to each person's channel as private videos, unless you choose to keep the footage on a storage you run.</p></div></div>
+          <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">smart_display</span><h3>Their own storage</h3><p>Each person picks their own YouTube channel (private videos), their own OneDrive or their own WebDAV, unless you choose a storage you run for everyone.</p></div></div>
           <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">login</span><h3>Sign in your way</h3><p>Local accounts, or Nextcloud: its groups become roles, so administrators and users come from the groups you already have.</p></div></div>
           <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">router</span><h3>A guide for the router</h3><p>Each friend gets step-by-step instructions, or a ready-made prompt for an AI assistant. Ports are opened only for the server's IP.</p></div></div>
           <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">admin_panel_settings</span><h3>An admin page</h3><p>Users, camera status and the day's YouTube quota at a glance. Deactivate someone and their recorder stops at once.</p></div></div>
@@ -145,14 +148,16 @@
       <div class="container">
         <p class="eyebrow eyebrow-dark">New · optional</p>
         <h2 id="storage-title">Choose where the recordings go</h2>
-        <p class="section-lead">YouTube stays the default. If you would rather keep the footage somewhere else, send it to your own cloud or disk instead.</p>
+        <p class="section-lead">YouTube stays the default. If you would rather keep the footage somewhere else, send it to your own OneDrive, Nextcloud, cloud or disk instead, and change your mind whenever you like.</p>
         <div class="row">
-          <div class="col-md-6 col-lg-3"><div class="card feature"><span class="mi" aria-hidden="true">smart_display</span><h3>YouTube</h3><p>Private videos, one playlist per day. The default, unchanged.</p></div></div>
-          <div class="col-md-6 col-lg-3"><div class="card feature"><span class="mi" aria-hidden="true">cloud</span><h3>WebDAV</h3><p>Nextcloud, ownCloud, Synology and anything else that speaks WebDAV.</p></div></div>
-          <div class="col-md-6 col-lg-3"><div class="card feature"><span class="mi" aria-hidden="true">sync_alt</span><h3>rclone</h3><p>Mega, S3-compatible storage, Dropbox, OneDrive and dozens more (Mega not tested by the author).</p></div></div>
-          <div class="col-md-6 col-lg-3"><div class="card feature"><span class="mi" aria-hidden="true">folder</span><h3>A folder</h3><p>Plain files on the machine that runs it.</p></div></div>
+          <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">smart_display</span><h3>YouTube</h3><p>Private videos, one playlist per day. The default, unchanged.</p></div></div>
+          <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">cloud_queue</span><h3>OneDrive</h3><p>Each person connects their own with a Microsoft sign-in. The app only sees its own folder, never the rest of your files.</p></div></div>
+          <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">cloud</span><h3>WebDAV</h3><p>Nextcloud, ownCloud, Synology and anything else that speaks WebDAV.</p></div></div>
+          <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">sync_alt</span><h3>rclone</h3><p>Mega, S3-compatible storage, Dropbox, Google Drive and dozens more, set by the server administrator (Mega not tested by the author).</p></div></div>
+          <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">folder</span><h3>A folder</h3><p>Plain files on the machine that runs it.</p></div></div>
+          <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">swap_horiz</span><h3>Switch any time</h3><p>Earlier destinations stay in your list and their videos stay on your page, each marked with where it is. Removing one from the list deletes nothing.</p></div></div>
         </div>
-        <p class="note"><span class="mi small" aria-hidden="true">play_circle</span> With several accounts the server picks the default and each person may use their own YouTube or WebDAV where you allow it. Every video has two buttons: <strong>Watch here</strong> plays it on the page (not for private YouTube videos, which YouTube refuses to embed), <strong>Open the video</strong> goes to where it lives. <a href="https://github.com/LuigiElleBalotta/tapo-uploader#where-the-recordings-go">Read how it works</a>.</p>
+        <p class="note"><span class="mi small" aria-hidden="true">play_circle</span> With several accounts the server picks the default and each person may use their own YouTube, OneDrive or WebDAV where you allow it. Every video has two buttons: <strong>Watch here</strong> plays it on the page (not for private YouTube videos, which YouTube refuses to embed), <strong>Open the video</strong> goes to where it lives. <a href="https://github.com/LuigiElleBalotta/tapo-uploader#where-the-recordings-go">Read how it works</a>.</p>
       </div>
     </section>
 
@@ -163,7 +168,7 @@
         <div class="row">
           <div class="col-md-6 col-lg-3"><div class="card place"><span class="mi" aria-hidden="true">memory</span><h3>Raspberry Pi / mini PC</h3><p>At home, on the LAN. Nothing exposed. <strong>Recommended.</strong></p></div></div>
           <div class="col-md-6 col-lg-3"><div class="card place"><span class="mi" aria-hidden="true">dns</span><h3>A VPS</h3><p>A few dollars a month. The setup used and tested by the author.</p></div></div>
-          <div class="col-md-6 col-lg-3"><div class="card place"><span class="mi" aria-hidden="true">inventory_2</span><h3>Docker</h3><p>A <code>Dockerfile</code> is included and works on any container host.</p></div></div>
+          <div class="col-md-6 col-lg-3"><div class="card place"><span class="mi" aria-hidden="true">inventory_2</span><h3>Docker</h3><p>A ready-made image on GitHub Container Registry (amd64 and arm64), or build the included <code>Dockerfile</code>.</p></div></div>
           <div class="col-md-6 col-lg-3"><div class="card place"><span class="mi" aria-hidden="true">cloud_upload</span><h3>Render free tier</h3><p>Possible, with limits (ephemeral disk, shared IPs). Tested up to startup only.</p></div></div>
         </div>
       </div>
@@ -201,14 +206,16 @@
             <h3>Will the videos be public?</h3>
             <p>No. On YouTube they are uploaded as private and only your Google account can see them; on WebDAV, rclone or a folder they sit where only you (and the server's administrator) can read them.</p>
             <h3>Can I keep them somewhere other than YouTube?</h3>
-            <p>Yes: WebDAV (Nextcloud and similar), a local folder, or anything rclone supports, such as Mega or S3 storage.</p>
+            <p>Yes: your own OneDrive, WebDAV (Nextcloud and similar), a local folder, or anything rclone supports, such as Mega or S3 storage.</p>
+            <h3>If I change where videos go, do I lose the old ones?</h3>
+            <p>No. The earlier destination stays in your list and its videos stay on your page, each marked with its source. They are never moved or deleted.</p>
             <h3>Can several people share one server?</h3>
             <p>Yes, with the optional multi-account mode: each person links their own camera and YouTube channel and sees only their own videos.</p>
             <h3>Is it a replacement for a cloud plan?</h3>
             <p>It replaces the storage part with your own YouTube channel. It does not replace the Tapo app's cloud timeline.</p>
           </div>
         </div>
-        <p class="note"><span class="mi small" aria-hidden="true">verified_user</span> Videos go only where the person who signs in chose: their own YouTube channel by default. The software is self-hosted and sends nothing to the author. Read the <a href="privacy.html">privacy policy</a>.</p>
+        <p class="note"><span class="mi small" aria-hidden="true">verified_user</span> Videos go only where the person who signs in chose: their own YouTube channel by default, or their own OneDrive or cloud. The software is self-hosted and sends nothing to the author. Read the <a href="privacy.html">privacy policy</a>.</p>
       </div>
     </section>
   </main>
