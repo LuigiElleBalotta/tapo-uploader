@@ -31,6 +31,16 @@
   </ul>
 </div>
 {% endif %}
+{% if offer_onedrive %}
+<div class="card app-card">
+  <h2 class="h5">OneDrive</h2>
+  <p class="text-muted">{% if onedrive_now %}OneDrive is connected. {% endif %}Sign in with Microsoft to send your recordings to your own OneDrive. The app can only use its own folder (<em>Apps</em>), never the rest of your files, and you can remove its access at any time in your Microsoft account.</p>
+  <form method="post" action="/storage/onedrive/connect">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-primary btn-round" type="submit">{% if onedrive_now %}Connect OneDrive again{% else %}Connect OneDrive{% endif %}</button>
+  </form>
+</div>
+{% endif %}
 {% if allow_own %}
 <div class="card app-card">
   <h2 class="h5">Use a different destination</h2>

@@ -9,7 +9,7 @@ import json
 import socket
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from tapo_storage.base import make_storage
 
@@ -24,10 +24,13 @@ class Resolved:
     config: dict = field(default_factory=dict, repr=False)  # holds secrets: never log it
     source: str = "server"                                  # "own" | "server"
     notice: Optional[str] = None
+    on_token: Optional[Callable] = field(default=None, repr=False, compare=False)  # saves a renewed OneDrive token
 
     def signature(self):
-        """Changes whenever the destination changes; reveals nothing about the secrets."""
-        text = json.dumps([self.kind, self.config], sort_keys=True)
+        """Changes whenever the destination changes; reveals nothing about the secrets. A refresh token that Microsoft
+        renews is still the same destination, so it is left out."""
+        config = {k: v for k, v in self.config.items() if k != "refresh_token"}
+        text = json.dumps([self.kind, config], sort_keys=True)
         return hashlib.sha256(text.encode()).hexdigest()[:16]
 
 
@@ -56,12 +59,18 @@ def resolve(settings, db, vault, user_id):
         return _fallback(default, f"Your {kind} setting is no longer allowed: the server default is used.")
     if kind == "youtube":
         return Resolved("youtube", {}, "own")
+    if kind == "onedrive" and not settings.onedrive_enabled:
+        return _fallback(default, "OneDrive is not set up on this server any more: the server default is used.")
     try:
         config = json.loads(vault.decrypt(row["config_enc"] or ""))
         if not isinstance(config, dict):
             raise ValueError("not an object")
     except (VaultError, ValueError, TypeError, AttributeError):
         return _fallback(default, f"Your saved {kind} settings cannot be read: the server default is used until you save them again.")
+    if kind == "onedrive":
+        def save(token, config=config):  # Microsoft hands out a new refresh token now and then: keep it
+            db.save_storage_config(user_id, "onedrive", vault.encrypt(json.dumps({**config, "refresh_token": token})))
+        return Resolved(kind, config, "own", on_token=save)
     return Resolved(kind, config, "own")
 
 
@@ -85,4 +94,17 @@ def build(resolved, settings, ctx, resolver=socket.getaddrinfo):
     elif resolved.kind == "webdav":  # a user-chosen address must not lead into the server's own network
         host_check = lambda host: checked_host(host, settings.allow_private_hosts, resolver)  # noqa: E731
     config["prefix"] = ctx.playlist_prefix
+    if resolved.kind == "onedrive":
+        config.update(client_id=settings.ms_client_id, client_secret=settings.ms_client_secret, tenant=settings.ms_tenant,
+                      on_token=resolved.on_token)
+        config.pop("account", None)
+        return _onedrive(config, settings)
     return make_storage(resolved.kind, config, ctx, host_check)
+
+
+def _onedrive(config, settings):
+    """Built here, not by make_storage: the Microsoft addresses come from the server settings only."""
+    from tapo_storage.onedrive import OneDriveStorage
+    return OneDriveStorage(config["client_id"], config["client_secret"], config.get("refresh_token", ""), config["prefix"],
+                           config.get("folder", ""), config["tenant"], config.get("on_token"),
+                           graph_url=settings.ms_graph_url, login_url=settings.ms_login_url)

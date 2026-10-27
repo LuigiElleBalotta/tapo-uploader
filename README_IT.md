@@ -649,8 +649,14 @@ per questo uso, quindi leggi la documentazione di rclone per i suoi limiti prima
 **In modalità multi-account** il server sceglie il default (`STORAGE` e le variabili `STORAGE_*`) e ogni utente lo
 ottiene senza fare nulla, anche senza accedere con Nextcloud. Le destinazioni che stanno sul server (WebDAV, cartella,
 rclone) hanno una sotto-cartella per ogni camera, così nessuno vede i video di un altro. Con `ALLOW_OWN_STORAGE=1`
-ogni utente può scegliere, nella pagina **Recordings**, YouTube o il proprio WebDAV (`STORAGE_ALLOWED` restringe la
-scelta; l'indirizzo deve essere pubblico e `https`). `local` e `rclone` sono solo per il server, di proposito: un
+ogni utente può scegliere, nella pagina **Recordings**, YouTube o il proprio WebDAV o il proprio **OneDrive** (`STORAGE_ALLOWED` restringe la
+scelta; l'indirizzo deve essere pubblico e `https`). `local` e `rclone` sono solo per il server, di proposito. Per OneDrive registra un'app su
+[portal.azure.com](https://portal.azure.com) (Registrazioni app, tipi di account "qualsiasi directory organizzativa e
+account Microsoft personali"), aggiungi il redirect web `PUBLIC_URL/storage/onedrive/callback`, crea un segreto client e
+imposta `MS_CLIENT_ID` e `MS_CLIENT_SECRET`: ogni utente preme poi **Connect OneDrive** e l'app può usare solo la propria
+cartella (`Files.ReadWrite.AppFolder`), mai il resto dei suoi file. OneDrive è provato contro una simulazione delle API
+Microsoft, non ancora su un account vero. Quando un utente cambia destinazione la precedente resta nella sua lista e i
+video restano nella pagina personale, ciascuno segnato con dove si trova. `local` e `rclone` sono solo per il server, di proposito: un
 percorso o una configurazione rclone scelti da un utente gli darebbero accesso al server stesso. Se una scelta salvata
 non è più permessa, si usa il default del server e la pagina lo dice. Solo YouTube consuma la quota condivisa. Con una
 destinazione sul server **il server conserva i video**: pianifica lo spazio disco e chi può leggerli.

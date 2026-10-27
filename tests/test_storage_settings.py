@@ -9,7 +9,7 @@ from tapo_web.db import Database
 
 def test_storage_settings_defaults():
     settings = Settings.from_env({})
-    assert settings.storage == "youtube" and settings.storage_allowed == ("youtube", "webdav")
+    assert settings.storage == "youtube" and settings.storage_allowed == ("youtube", "webdav", "onedrive")
     assert settings.allow_own_storage is False
     assert settings.storage_webdav_url == "" and settings.storage_local_root == "" and settings.rclone_remote == ""
 

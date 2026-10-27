@@ -145,6 +145,8 @@ def create_app(settings: Settings, db: Database = None):
     register_youtube(app)
     from .storage_page import register as register_storage
     register_storage(app)
+    from .onedrive_link import register as register_onedrive
+    register_onedrive(app)
     from .media import register as register_media
     register_media(app)
     from .pending import register as register_pending

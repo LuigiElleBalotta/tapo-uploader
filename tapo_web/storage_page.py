@@ -12,7 +12,7 @@ from .security import UnsafeHost, assert_public_host, checked_host
 from .sources import label_for, remember, remembered
 from .storage import Resolved, resolve, server_default
 
-LABELS = {"youtube": "YouTube", "webdav": "WebDAV (Nextcloud and similar)",
+LABELS = {"youtube": "YouTube", "onedrive": "OneDrive (your own, app folder only)", "webdav": "WebDAV (Nextcloud and similar)",
           "local": "a folder on the server", "rclone": "a cloud storage connected to the server (rclone)"}
 
 
@@ -37,11 +37,13 @@ def register(app):
         resolved = resolve(settings, db, vault, uid())
         row = db.storage_config(uid())
         own = own_webdav()
-        kinds = [k for k in settings.storage_allowed if k in USER_STORAGE_KINDS]
+        kinds = [k for k in settings.storage_allowed if k in USER_STORAGE_KINDS and k != "onedrive"]   # OneDrive has its own button
+        offer_onedrive = settings.allow_own_storage and settings.onedrive_enabled and "onedrive" in settings.storage_allowed
         values = form or {"kind": row["kind"] if row and resolved.source == "own" else "default",
                           "url": own.get("url", ""), "user": own.get("user", ""), "folder": own.get("folder", "")}
         return render_template("storage.html", resolved=resolved, label=LABELS[resolved.kind],
                                allow_own=settings.allow_own_storage and bool(kinds), kinds=kinds, labels=LABELS,
+                               offer_onedrive=offer_onedrive, onedrive_now=resolved.kind == "onedrive" and resolved.source == "own",
                                values=values, has_password=bool(own.get("password")), error=error, result=result,
                                server_label=LABELS[settings.storage],
                                sources=[{"id": sid, "label": label_for(old)} for sid, old in remembered(db, vault, uid())
@@ -51,6 +53,8 @@ def register(app):
         """The destination in use stays a source when the new one is a different place."""
         if before.signature() != after.signature():
             remember(db, vault, uid(), before)
+
+    state["storage_show"] = show
 
     def webdav_config():
         """The WebDAV settings in the form, checked; (config, None) or (None, message)."""
@@ -94,6 +98,8 @@ def register(app):
             db.delete_storage_config(uid())
             flash("Your recordings go to the server's default destination.", "success")
             return redirect("/storage")
+        if kind == "onedrive":
+            return show(400, "Use the Connect OneDrive button to link your OneDrive.", form=form_values())
         if kind not in USER_STORAGE_KINDS or kind not in settings.storage_allowed:
             return show(400, "That destination is not available on this server.", form=form_values())
         if kind == "youtube":

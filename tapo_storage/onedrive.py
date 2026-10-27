@@ -47,6 +47,26 @@ class OneDriveStorage(Storage):
         self._access, self._expires = None, 0.0
         self._day_re = re.compile(rf"^{re.escape(prefix)} ({DAY_RE.pattern})$")
 
+    @classmethod
+    def with_code(cls, client_id, client_secret, code, redirect_uri, verifier, tenant="common", **urls):
+        """Finish the sign-in: swap the one-time `code` for the long-lived access. Returns (storage, drive id)."""
+        self = cls(client_id, client_secret, "pending", "Tapo", tenant=tenant, **urls)
+        form = urlencode({"client_id": client_id, "client_secret": client_secret, "grant_type": "authorization_code",
+                          "code": code, "redirect_uri": redirect_uri, "code_verifier": verifier, "scope": SCOPE}).encode()
+        status, _, data = self._read("POST", f"{self.login_url}/{quote(self.tenant, safe='')}/oauth2/v2.0/token", form,
+                                     {"Content-Type": "application/x-www-form-urlencoded", "Content-Length": str(len(form))})
+        try:
+            answer = json.loads(data or b"{}")
+        except ValueError:
+            answer = {}
+        if status != 200 or not answer.get("access_token") or not answer.get("refresh_token"):
+            raise StorageError("Microsoft did not give a long-lived access")
+        self.refresh_token, self._access = answer["refresh_token"], answer["access_token"]
+        self._expires = time.time() + int(answer.get("expires_in") or 300)
+        _, _, data = self._graph("GET", self._item(), ok={200})
+        drive = (json.loads(data or b"{}").get("parentReference") or {}).get("driveId", "")
+        return self, drive
+
     # ----- http -----
 
     def _send(self, method, url, body=None, headers=None):

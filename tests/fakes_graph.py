@@ -14,6 +14,7 @@ class FakeGraph:
         self.client_id, self.client_secret = client_id, client_secret
         self.mode = "ok"            # "revoked": the token endpoint refuses; "expire": every access token is rejected once
         self.access = 0
+        self.drive_id = "drive-1"
         self.rejected = False
         self.files, self.dirs = {}, {""}            # path under the app folder -> bytes ; folder paths ('' = the app folder)
         self.sessions = {}                           # upload id -> {"path", "size", "data"}
@@ -79,6 +80,12 @@ class FakeGraph:
     def token(self, h):
         form = {k: v[0] for k, v in parse_qs(h.body().decode()).items()}
         self.token_calls.append(form)
+        if form.get("grant_type") == "authorization_code":
+            if (form.get("code") != "good-code" or not form.get("code_verifier") or not form.get("redirect_uri")
+                    or form.get("client_id") != self.client_id or form.get("client_secret") != self.client_secret):
+                return h.reply(400, {"error": "invalid_grant", "error_description": "AADSTS70000 secret detail"})
+            self.access += 1
+            return h.reply(200, {"access_token": f"access-{self.access}", "refresh_token": self.refresh_token, "expires_in": 3600})
         if (self.mode == "revoked" or form.get("grant_type") != "refresh_token" or form.get("refresh_token") != self.refresh_token
                 or form.get("client_id") != self.client_id or form.get("client_secret") != self.client_secret):
             return h.reply(400, {"error": "invalid_grant", "error_description": "AADSTS70000 secret detail"})
@@ -98,7 +105,8 @@ class FakeGraph:
         folder, tail = (match["path"] or "").strip("/"), match["tail"] or ""
         if tail == "" and h.command == "GET":
             if folder in self.dirs:
-                return h.reply(200, {"name": folder.rsplit("/", 1)[-1] or "Apps", "folder": {}})
+                return h.reply(200, {"name": folder.rsplit("/", 1)[-1] or "Apps", "folder": {},
+                                     "parentReference": {"driveId": self.drive_id}})
             if folder in self.files:
                 return h.reply(200, self.item(folder))
             return h.reply(404, {"error": {"code": "itemNotFound"}})

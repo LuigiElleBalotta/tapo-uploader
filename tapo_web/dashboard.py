@@ -19,7 +19,7 @@ log = logging.getLogger("tapo.web")
 PLAYLIST_PREFIX = "Tapo"
 MAX_PLAYLIST_PAGES = 4
 THUMBNAIL_HOST = "https://i.ytimg.com/"
-MEDIA_LABELS = {"webdav": "WebDAV", "local": "the server", "rclone": "your cloud storage"}
+MEDIA_LABELS = {"webdav": "WebDAV", "onedrive": "OneDrive", "local": "the server", "rclone": "your cloud storage"}
 
 
 def ago(timestamp, now=None):
