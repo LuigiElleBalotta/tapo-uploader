@@ -170,6 +170,13 @@ class Supervisor:
 
     # ----- status -----
 
+    def _last_problem_was_offline(self, camera_id, message):
+        """True when the newest offline/error event is the camera being unreachable with this very message."""
+        for event in self.db.events_for_camera(camera_id, limit=20):
+            if event["kind"] in ("offline", "error"):
+                return event["kind"] == "offline" and event["detail"] == message
+        return False
+
     def _on_status(self, camera_id, kind, detail):
         camera = self.db.camera_by_id(camera_id)
         if camera is None:
@@ -177,8 +184,8 @@ class Supervisor:
         now, detail = self.clock(), (detail or "")[:300]
         if kind == "online":
             fields = {"status": "online", "last_seen": now}
-            if camera["status"] == "offline":   # the connection is back: its message is history (an upload problem stays)
-                fields["last_error"] = None
+            if camera["last_error"] and self._last_problem_was_offline(camera_id, camera["last_error"]):
+                fields["last_error"] = None     # the connection is back: its message is history (an upload problem stays)
             self.db.set_camera_status(camera_id, **fields)
         elif kind == "motion":
             self.db.set_camera_status(camera_id, last_motion=now)

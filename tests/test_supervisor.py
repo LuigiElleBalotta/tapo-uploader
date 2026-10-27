@@ -263,3 +263,14 @@ def test_coming_back_online_clears_the_offline_message_but_not_an_upload_problem
     report("error", "YouTube quota exceeded")             # a problem of the upload, not of the connection
     report("online", "")
     assert env.db.camera_for_user(env.alice, cid)["last_error"] == "YouTube quota exceeded"
+
+
+def test_a_stale_offline_message_is_cleared_even_if_the_status_is_already_online(tmp_path):
+    env = make(tmp_path)
+    cid = add_camera(env, env.alice)
+    env.sup.sync()
+    report = FakeWorker.instances[0].on_status
+    report("offline", "[Errno 113] No route to host")
+    env.db.set_camera_status(cid, status="online")          # as left by a version that did not clear the message
+    report("online", "")
+    assert env.db.camera_for_user(env.alice, cid)["last_error"] is None
