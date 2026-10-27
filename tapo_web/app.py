@@ -49,6 +49,24 @@ def create_app(settings: Settings, db: Database = None):
 
     app.jinja_env.globals.update(csrf_token=csrf_token, current_user=current_user, settings=settings)
 
+    @app.context_processor
+    def local_warnings():
+        """Warnings for every page: the disk is nearly full (everybody), or this person's space on the server is."""
+        user = current_user()
+        state = getattr(app.extensions["tapo"].get("supervisor"), "local_state", None) or {}
+        notes = []
+        if user and state.get("disk_low"):
+            free = state.get("free_gb")
+            notes.append(f"The server's disk is almost full{f' ({free:g} GB free)' if free is not None else ''}. The oldest videos "
+                         "kept on the server are being deleted to make room. Videos in YouTube, OneDrive or other clouds are "
+                         "never touched, but clips waiting to be uploaded still use space here.")
+        mine = (state.get("users") or {}).get(user["id"]) if user else None
+        if mine and mine.get("full"):
+            gb = 1024 ** 3
+            notes.append(f"Your space on the server is full ({mine['used'] / gb:.1f} GB of {mine['limit'] / gb:.1f} GB used). "
+                         "The oldest videos kept on the server are deleted to make room for new ones.")
+        return {"local_warnings": notes}
+
     @app.before_request
     def protect_forms():
         if request.method in ("POST", "PUT", "PATCH", "DELETE"):

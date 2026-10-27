@@ -331,9 +331,13 @@ def upload_pending(ctx, state, force=False, report=_ignore, gate=None):
             gate.charge()
 
 
+STORAGE_RETRY_SECONDS = 600   # a destination that refuses the upload (full, unreachable): try again in ten minutes
+
+
 def daily_loop(ctx, stop, report=_ignore, gate=None):
     state = base.load_state(ctx)
     while not stop.is_set():
+        delay = 60
         try:
             upload_pending(ctx, state, report=report, gate=gate)
         except HttpError as err:
@@ -349,10 +353,11 @@ def daily_loop(ctx, stop, report=_ignore, gate=None):
         except StorageError as err:
             log.error("upload failed: %s", ctx.scrub(str(err)))
             report("error", ctx.scrub(str(err)))
+            delay = STORAGE_RETRY_SECONDS   # the clips stay here and are offered again, they are not deleted
         except Exception as err:
             log.exception("daily upload failed")
             report("error", ctx.scrub(str(err)))
-        stop.wait(60)
+        stop.wait(delay)
 
 
 # ---------- commands ----------

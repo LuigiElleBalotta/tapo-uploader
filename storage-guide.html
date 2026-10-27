@@ -109,6 +109,15 @@ STORAGE_RCLONE_FOLDER=Tapo                  # optional
 
         <h2 id="folder">A folder on the server</h2>
         <p>Plain files in <code>Tapo YYYY-MM-DD</code> folders, for people who keep the footage on the machine that runs it (a NAS, a home server). Set <code>STORAGE=local</code> and <code>STORAGE_LOCAL_ROOT=/path/to/videos</code> (single-user: <code>LOCAL_ROOT</code>). With Docker, mount that path as a volume. Everyone sees only their own camera's subfolder and watches the videos from their page.</p>
+        <h3>Letting each person keep their videos on the server</h3>
+        <p>Add <code>local</code> to <code>STORAGE_ALLOWED</code> (with <code>ALLOW_OWN_STORAGE=1</code>) and people can choose <em>Keep on the server</em> on their Recordings page. They pick no folder: the videos go to <code>videos/&lt;person&gt;/camera-&lt;n&gt;/</code>, split by day like any other destination, and are watched from the page.</p>
+        <h3>Rotation: keeping the disk from filling up</h3>
+        <ul>
+          <li><code>LOCAL_KEEP_DAYS</code> (default <code>0</code> = never): videos older than this are deleted. Each person can set their own number on the Recordings page; empty means the server's value.</li>
+          <li><code>LOCAL_QUOTA_GB</code> (default <code>0</code> = unlimited): space per person. When it is full the oldest videos go first, and the person sees a notice. An administrator can set a different limit for one person on the Admin page.</li>
+          <li><code>DISK_MIN_FREE_GB</code> (default <code>1</code>, <code>0</code> = off): when the disk has less free space than this, every page warns and the oldest videos kept on the server (anyone's) are deleted until there is room.</li>
+        </ul>
+        <p>Only videos kept on the server are ever deleted. Videos in YouTube, OneDrive or any other cloud are never touched. If a cloud refuses the upload (it is full, or unreachable), the clips wait on the server and are offered again every ten minutes, so they use space here until the cloud accepts them.</p>
 
         <h2 id="switching">Changing destination later</h2>
         <p>Change it any time on <strong>Recordings</strong>. The destination used until then is kept in your list of <em>earlier destinations</em>: its videos stay on your page, each marked with where it lives (YouTube, OneDrive, WebDAV...). Removing an earlier destination from the list only hides it; no video is ever moved or deleted.</p>

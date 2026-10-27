@@ -31,6 +31,21 @@
   </ul>
 </div>
 {% endif %}
+{% if local_card %}
+<div class="card app-card">
+  <h2 class="h5">Videos kept on the server</h2>
+  <p class="text-muted">They are split by day like any other destination. You can let the server delete the oldest ones so the disk does not fill up. Videos in a cloud are never deleted by this.{% if local_card.usage %} <strong>Space used: {{ local_card.usage }}.</strong>{% endif %}</p>
+  <form method="post" action="/storage/local">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-group">
+      <label for="keep_days">Keep them for (days)</label>
+      <input class="form-control" id="keep_days" name="keep_days" inputmode="numeric" value="{{ local_card.keep }}" placeholder="Server default: {{ local_card.server }}" autocomplete="off">
+      <small class="text-muted">Empty = the server's default ({{ local_card.server }}). 0 = keep them forever.</small>
+    </div>
+    <button class="btn btn-primary btn-round" type="submit">Save</button>
+  </form>
+</div>
+{% endif %}
 {% if offer_onedrive %}
 <div class="card app-card">
   <h2 class="h5">OneDrive</h2>

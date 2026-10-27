@@ -690,7 +690,13 @@ and personal Microsoft accounts"), adds the web redirect `PUBLIC_URL/storage/one
 and pastes the ID and the secret on the **Recordings** page (kept encrypted with their account); an administrator may
 instead set `MS_CLIENT_ID` and `MS_CLIENT_SECRET` as a shared app for people who type nothing. The app can only use its own
 folder (`Files.ReadWrite.AppFolder`), never the rest of their files. OneDrive is tested against a fake of Microsoft's
-API, not yet against a real account. Whenever a user changes destination the previous one stays in their list and its
+API, not yet against a real account. **Keeping videos on the server:** add `local` to `STORAGE_ALLOWED` and people can choose it on the Recordings page (no folder to pick:
+`STORAGE_LOCAL_ROOT/<user>/camera-<n>`, default `DATA_DIR/videos`). Rotation is optional and off by default:
+`LOCAL_KEEP_DAYS` (0 = never; each person may set their own), `LOCAL_QUOTA_GB` per person (0 = unlimited; an administrator
+may set one per person on the Admin page, and the oldest videos go first when it is full) and `DISK_MIN_FREE_GB` (default 1:
+below it every page warns and the oldest local videos are deleted). Videos in a cloud are never deleted by this; if a
+cloud refuses an upload the clips wait on the server and are retried every ten minutes.
+Whenever a user changes destination the previous one stays in their list and its
 videos stay on the personal page, each marked with where it lives. `local` and `rclone` are
 server-only on purpose: a path or an rclone configuration chosen by a user would give them access to the server
 itself. If a saved choice stops being allowed, the server default is used and the page says so. Only YouTube

@@ -12,7 +12,7 @@
   <h2 class="h5">Users</h2>
   <div class="table-responsive">
   <table class="table">
-    <thead><tr><th>Name</th><th>Sign-in</th><th>Role</th><th>Status</th><th></th></tr></thead>
+    <thead><tr><th>Name</th><th>Sign-in</th><th>Role</th><th>Status</th><th>Server space (GB)</th><th></th></tr></thead>
     <tbody>
     {% for user in users %}
       <tr>
@@ -28,6 +28,13 @@
           {% endif %}
         </td>
         <td>{% if user.active %}<span class="badge badge-ok">active</span>{% else %}<span class="badge badge-idle">deactivated</span>{% endif %}</td>
+        <td>
+          <form method="post" action="/admin/users/{{ user.id }}/local-quota" class="form-inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input class="form-control form-control-sm" style="width:5rem" name="gb" inputmode="decimal" value="{{ quotas[user.id] if quotas[user.id] is not none else '' }}" placeholder="default" aria-label="Server space limit in GB for {{ user.display_name }}">
+            <button class="btn btn-neutral btn-sm" type="submit">Set</button>
+          </form>
+        </td>
         <td>
           <form method="post" action="/admin/users/{{ user.id }}/active">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

@@ -17,6 +17,7 @@ from tapo_storage.base import StorageError
 from .cameras import camera_data_dir, safe_context
 from .crypto import VaultError
 from .quota import QuotaLedger, UploadGate, stagger_slots
+from .retention import run_local_retention
 from .security import UnsafeHost
 from .storage import build, resolve
 from .youtube_link import LinkRevoked, youtube_for_user
@@ -24,6 +25,7 @@ from .youtube_link import LinkRevoked, youtube_for_user
 log = logging.getLogger("tapo.web")
 SYNC_SECONDS = 30
 MAINTENANCE_SECONDS = 3600
+LOCAL_CHECK_SECONDS = 600
 STALE_CLIP_DAYS = 7
 EVENT_DAYS = 30
 
@@ -78,6 +80,7 @@ class Supervisor:
         self.ledger = QuotaLedger(db, settings.quota_daily)
         self.running = {}   # camera id -> {"worker", "signature"}
         self.backoff = {}   # camera id -> {"failures", "not_before"}
+        self.local_state = {"disk_low": False, "free_gb": None, "users": {}}   # for the warnings on the pages
         self.lock = threading.RLock()
         self._stop = threading.Event()
         self._thread = None
@@ -211,6 +214,16 @@ class Supervisor:
                 for camera in self.db.cameras_for_user(user["id"]):
                     discard_stale_clips(camera_data_dir(self.settings, camera) / "events", now, STALE_CLIP_DAYS)
 
+    def local_rotation(self, now=None, free_bytes=None):
+        """Delete old videos kept on the server (age, a person's space limit, a nearly full disk); see retention.py."""
+        now = now or datetime.fromtimestamp(self.clock())
+        try:
+            extra = {} if free_bytes is None else {"free_bytes": free_bytes}
+            self.local_state = run_local_retention(self.settings, self.db, self.vault, self.resolver, now, **extra)
+        except Exception:
+            log.exception("rotation of the local videos failed")
+        return self.local_state
+
     # ----- background loop -----
 
     def start(self):
@@ -219,10 +232,13 @@ class Supervisor:
         self._thread.start()
 
     def _loop(self):
-        last_maintenance = 0.0
+        last_maintenance = last_local = 0.0
         while not self._stop.is_set():
             try:
                 self.sync()
+                if self.clock() - last_local >= LOCAL_CHECK_SECONDS:
+                    self.local_rotation()
+                    last_local = self.clock()
                 if self.clock() - last_maintenance >= MAINTENANCE_SECONDS:
                     self.maintenance()
                     last_maintenance = self.clock()

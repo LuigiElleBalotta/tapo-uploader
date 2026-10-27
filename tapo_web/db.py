@@ -8,7 +8,7 @@ import threading
 import time
 from pathlib import Path
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -65,6 +65,11 @@ CREATE TABLE IF NOT EXISTS storage_sources (
     label TEXT NOT NULL,
     added_at REAL NOT NULL,
     UNIQUE (user_id, signature)
+);
+CREATE TABLE IF NOT EXISTS user_settings (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    local_keep_days INTEGER,
+    local_quota_gb REAL
 );
 CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY,
@@ -243,6 +248,20 @@ class Database:
 
     def delete_storage_source(self, user_id, source_id):
         self._run("DELETE FROM storage_sources WHERE user_id = ? AND id = ?", (user_id, source_id))
+
+    # ----- per-account settings (None = the server's value applies) -----
+
+    USER_SETTING_FIELDS = ("local_keep_days", "local_quota_gb")
+
+    def user_settings(self, user_id):
+        row = self._one("SELECT local_keep_days, local_quota_gb FROM user_settings WHERE user_id = ?", (user_id,))
+        return row or {"local_keep_days": None, "local_quota_gb": None}
+
+    def set_user_setting(self, user_id, field, value):
+        if field not in self.USER_SETTING_FIELDS:   # the column name is never taken from a caller's text
+            raise ValueError(f"unknown setting {field}")
+        self._run(f"INSERT INTO user_settings (user_id, {field}) VALUES (?, ?) "
+                  f"ON CONFLICT(user_id) DO UPDATE SET {field} = excluded.{field}", (user_id, value))
 
     # ----- quota and events -----
 

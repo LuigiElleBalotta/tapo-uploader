@@ -658,7 +658,14 @@ account Microsoft personali"), aggiunge il redirect web `PUBLIC_URL/storage/oned
 incolla ID e segreto nella pagina **Recordings** (restano cifrati con il suo account); un amministratore può invece
 impostare `MS_CLIENT_ID` e `MS_CLIENT_SECRET` come app condivisa per chi non scrive nulla. L'app può usare solo la propria
 cartella (`Files.ReadWrite.AppFolder`), mai il resto dei suoi file. OneDrive è provato contro una simulazione delle API
-Microsoft, non ancora su un account vero. Quando un utente cambia destinazione la precedente resta nella sua lista e i
+Microsoft, non ancora su un account vero. **Video tenuti sul server:** aggiungi `local` a `STORAGE_ALLOWED` e le persone possono sceglierlo nella pagina Recordings
+(nessuna cartella da scegliere: `STORAGE_LOCAL_ROOT/<utente>/camera-<n>`, di default `DATA_DIR/videos`). La rotazione è
+facoltativa e spenta di default: `LOCAL_KEEP_DAYS` (0 = mai; ognuno può impostare il suo), `LOCAL_QUOTA_GB` per persona
+(0 = illimitato; un amministratore può darne uno diverso a una persona dalla pagina Admin, e quando è pieno spariscono
+prima i video più vecchi) e `DISK_MIN_FREE_GB` (default 1: sotto questa soglia ogni pagina avvisa e vengono cancellati i
+video locali più vecchi). I video su un cloud non vengono mai cancellati da questa regola; se un cloud rifiuta un
+upload le clip restano sul server e si riprova ogni dieci minuti.
+Quando un utente cambia destinazione la precedente resta nella sua lista e i
 video restano nella pagina personale, ciascuno segnato con dove si trova. `local` e `rclone` sono solo per il server, di proposito: un
 percorso o una configurazione rclone scelti da un utente gli darebbero accesso al server stesso. Se una scelta salvata
 non è più permessa, si usa il default del server e la pagina lo dice. Solo YouTube consuma la quota condivisa. Con una

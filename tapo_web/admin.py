@@ -1,4 +1,6 @@
 """The administrator's page: users, every camera's status, the day's quota and the main settings (read only)."""
+import re
+
 from flask import abort, flash, redirect, render_template, request
 
 from .quota import QuotaLedger
@@ -30,6 +32,12 @@ def register(app):
         if state["supervisor"]:
             state["supervisor"].sync()
 
+    def local_summary():
+        keep = f"{settings.local_keep_days} days" if settings.local_keep_days else "forever"
+        space = f"{settings.local_quota_gb:g} GB per person" if settings.local_quota_gb else "no space limit"
+        disk = f"warning and clean-up below {settings.disk_min_free_gb:g} GB free" if settings.disk_min_free_gb else "disk watch off"
+        return f"default: keep {keep}, {space}; {disk}"
+
     def admin_page(status=200):
         supervisor = state["supervisor"]
         users = db.list_users()
@@ -50,9 +58,11 @@ def register(app):
             "Local accounts": "on" if settings.local_login else "off",
             "Google project": "configured" if settings.google_client_json else "not configured",
             "Own Google project per user": "allowed" if settings.allow_own_google_client else "not allowed",
+            "Videos kept on the server": local_summary(),
             "Private camera addresses": "allowed" if settings.allow_private_hosts else "refused",
         }
-        return render_template("admin.html", users=users, cameras=cameras, shown=shown,
+        quotas = {user["id"]: db.user_settings(user["id"])["local_quota_gb"] for user in users}
+        return render_template("admin.html", users=users, cameras=cameras, shown=shown, quotas=quotas,
                                quota_used=ledger.used(), quota_limit=settings.quota_daily), status
 
     @app.get("/admin")
@@ -72,6 +82,22 @@ def register(app):
         db.set_user_active(user_id, value == "1")
         resync()
         flash(f"{user['display_name']} is now {'active' if value == '1' else 'deactivated'}.", "success")
+        return redirect("/admin")
+
+    @app.post("/admin/users/<int:user_id>/local-quota")
+    @app.admin_required
+    def admin_set_local_quota(user_id):
+        """How much of the server's disk this person's videos may use (blank = the server default, 0 = unlimited)."""
+        user = target_user(user_id)
+        raw = request.form.get("gb", "").strip()
+        if raw == "":
+            value = None
+        elif re.fullmatch(r"\d{1,7}(\.\d{1,3})?", raw):
+            value = float(raw)
+        else:
+            return refuse("Enter the limit in GB as a plain number (0 means unlimited), or leave it empty.")
+        db.set_user_setting(user_id, "local_quota_gb", value)
+        flash(f"Space limit for {user['display_name']}: {'the server default' if value is None else ('unlimited' if value == 0 else f'{value:g} GB')}.", "success")
         return redirect("/admin")
 
     @app.post("/admin/users/<int:user_id>/role")

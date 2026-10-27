@@ -88,5 +88,5 @@ def test_migration_from_version_1_adds_table_and_keeps_rows(tmp_path):
     assert second.youtube_link(uid)["channel_title"] == "Channel"
     second.save_storage_config(uid, "webdav", "enc")
     assert second.storage_config(uid)["kind"] == "webdav"
-    assert second._conn.execute("SELECT version FROM schema_version").fetchone()[0] == 3
+    assert second._conn.execute("SELECT version FROM schema_version").fetchone()[0] == 4
     assert second._conn.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0] == 1

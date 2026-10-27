@@ -110,7 +110,7 @@ def test_daily_loop_reports_storage_error_without_quota_handling(single_user_env
     stop.wait = lambda seconds=None: (waits.append(seconds), stop.set())[0]
     seen = []
     motion.daily_loop(ctx, stop, lambda kind, detail="": seen.append((kind, detail)), ForbiddenGate())
-    assert ("error", "remote said no") in seen and clip.exists() and waits == [60]
+    assert ("error", "remote said no") in seen and clip.exists() and waits == [600]
 
 
 def test_unreachable_destination_is_found_before_clips_are_joined(single_user_env, tmp_path, monkeypatch):

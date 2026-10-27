@@ -38,6 +38,7 @@
         <div class="alert alert-{{ category if category in ('success', 'danger', 'warning', 'info') else 'info' }}" role="alert">{{ message }}</div>
       {% endfor %}
     {% endwith %}
+    {% for note in local_warnings %}<div class="alert alert-warning" role="alert"><span class="mi small" aria-hidden="true">warning</span> {{ note }}</div>{% endfor %}
     {% block content %}{% endblock %}
   </main>
 

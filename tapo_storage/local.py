@@ -46,6 +46,40 @@ class LocalStorage(Storage):
             raise StorageError(f"could not save {name}: {err.strerror or err}") from err
         return StoredItem(name, day, final.stat().st_size, _when(final), None)
 
+    def videos(self):
+        """Every video, the oldest first (by day, then name)."""
+        if not self.root.is_dir():
+            return []
+        found = []
+        for entry in self.root.iterdir():
+            match = self._day_re.match(entry.name)
+            if entry.is_dir() and match:
+                found += [StoredItem(p.name, match.group(1), p.stat().st_size, _when(p), None) for p in entry.glob("*.mp4")]
+        return sorted(found, key=lambda item: (item.day, item.name))
+
+    def usage(self):
+        """Bytes used by the videos and their chapter files."""
+        if not self.root.is_dir():
+            return 0
+        return sum(p.stat().st_size for folder in self.root.iterdir() if folder.is_dir() and self._day_re.match(folder.name)
+                   for p in folder.iterdir() if p.is_file())
+
+    def remove(self, day, name):
+        """Delete one video with its chapter file (and the day's folder once empty). Returns the bytes freed."""
+        if not DAY_RE.fullmatch(day) or name != Path(name).name or not name.endswith(".mp4") or name in ("", ".", ".."):
+            raise StorageError("no such recording")
+        folder = self._folder(day)
+        freed = 0
+        for path in (folder / name, folder / sidecar_name(name)):
+            if path.is_file() and not path.is_symlink():
+                freed += path.stat().st_size
+                path.unlink()
+        try:
+            folder.rmdir()
+        except OSError:
+            pass                      # other videos are still in it
+        return freed
+
     def days(self, limit=10):
         if not self.root.is_dir():
             return []

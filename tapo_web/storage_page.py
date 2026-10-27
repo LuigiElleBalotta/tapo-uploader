@@ -42,6 +42,23 @@ def register(app):
         except (VaultError, ValueError):
             return {}
 
+    def keeps_on_server():
+        """True when this person's videos are (or were) kept on the server's disk: the rotation settings matter then."""
+        return resolve(settings, db, vault, uid()).kind == "local" or any(old.kind == "local" for _, old in remembered(db, vault, uid()))
+
+    def local_card():
+        if not keeps_on_server():
+            return None
+        row = db.user_settings(uid())
+        mine = ((getattr(state.get("supervisor"), "local_state", None) or {}).get("users") or {}).get(uid())
+        usage = ""
+        if mine:
+            gb = 1024 ** 3
+            usage = (f"{mine['used'] / gb:.1f} GB of {mine['limit'] / gb:.1f} GB" if mine["limit"] > 0
+                     else f"{mine['used'] / gb:.1f} GB (no limit)")
+        server = f"{settings.local_keep_days} days" if settings.local_keep_days else "forever"
+        return {"keep": "" if row["local_keep_days"] is None else row["local_keep_days"], "server": server, "usage": usage}
+
     def show(status=200, error=None, result=None, form=None):
         resolved = resolve(settings, db, vault, uid())
         row = db.storage_config(uid())
@@ -52,7 +69,7 @@ def register(app):
                           "url": own.get("url", ""), "user": own.get("user", ""), "folder": own.get("folder", "")}
         return render_template("storage.html", resolved=resolved, label=LABELS[resolved.kind],
                                allow_own=settings.allow_own_storage and bool(kinds), kinds=kinds, labels=LABELS,
-                               offer_onedrive=offer_onedrive,
+                               local_card=local_card(), offer_onedrive=offer_onedrive,
                                onedrive_redirect=(settings.public_url or request.host_url.rstrip("/")) + "/storage/onedrive/callback", server_has_ms_app=settings.onedrive_enabled,
                                saved_ms_client_id=own_onedrive().get("client_id", ""), onedrive_now=resolved.kind == "onedrive" and resolved.source == "own",
                                values=values, has_password=bool(own.get("password")), error=error, result=result,
@@ -129,6 +146,23 @@ def register(app):
         keep_if_left(before, Resolved("webdav", config, "own"))
         db.save_storage_config(uid(), "webdav", vault.encrypt(json.dumps(config)))
         flash("Saved. The recorder restarts with the new destination within a minute.", "success")
+        return redirect("/storage")
+
+    @app.post("/storage/local")
+    @app.login_required
+    def storage_local_keep():
+        """How long the videos kept on the server stay: this person's own number of days, or the server's (blank)."""
+        if not keeps_on_server():
+            abort(403)
+        raw = request.form.get("keep_days", "").strip()
+        if raw == "":
+            value = None
+        elif raw.isascii() and raw.isdigit() and int(raw) <= 3650:
+            value = int(raw)
+        else:
+            return show(400, "Enter a whole number of days between 0 and 3650 (0 keeps them forever), or leave it empty.")
+        db.set_user_setting(uid(), "local_keep_days", value)
+        flash("Saved. Older videos on the server are removed within ten minutes." if value else "Saved.", "success")
         return redirect("/storage")
 
     @app.post("/storage/sources/<int:source_id>/forget")
