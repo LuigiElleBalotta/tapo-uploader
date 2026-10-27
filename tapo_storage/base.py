@@ -80,6 +80,10 @@ def make_storage(kind, config, ctx, host_check=None):
         from .webdav import WebDAVStorage
         return WebDAVStorage(config.get("url", ""), config.get("user", ""), config.get("password", ""), prefix,
                              config.get("folder", ""), host_check)
+    if kind == "onedrive":
+        from .onedrive import OneDriveStorage
+        return OneDriveStorage(config.get("client_id", ""), config.get("client_secret", ""), config.get("refresh_token", ""),
+                               prefix, config.get("folder", ""), config.get("tenant", "common"), config.get("on_token"))
     if kind == "youtube":
         from .youtube import YouTubeStorage
         return YouTubeStorage(ctx, config.get("state"))
