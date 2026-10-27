@@ -59,8 +59,8 @@ def resolve(settings, db, vault, user_id):
         return _fallback(default, f"Your {kind} setting is no longer allowed: the server default is used.")
     if kind == "youtube":
         return Resolved("youtube", {}, "own")
-    if kind == "onedrive" and not settings.onedrive_enabled:
-        return _fallback(default, "OneDrive is not set up on this server any more: the server default is used.")
+    if kind == "local":
+        return Resolved("local", {}, "own")
     try:
         config = json.loads(vault.decrypt(row["config_enc"] or ""))
         if not isinstance(config, dict):
@@ -68,6 +68,9 @@ def resolve(settings, db, vault, user_id):
     except (VaultError, ValueError, TypeError, AttributeError):
         return _fallback(default, f"Your saved {kind} settings cannot be read: the server default is used until you save them again.")
     if kind == "onedrive":
+        if not config.get("client_id") and not settings.onedrive_enabled:
+            return _fallback(default, "OneDrive is not set up on this server any more: the server default is used.")
+
         def save(token, config=config):  # Microsoft hands out a new refresh token now and then: keep it
             db.save_storage_config(user_id, "onedrive", vault.encrypt(json.dumps({**config, "refresh_token": token})))
         return Resolved(kind, config, "own", on_token=save)
@@ -85,18 +88,20 @@ def build(resolved, settings, ctx, resolver=socket.getaddrinfo):
         return None
     config = dict(resolved.config)
     host_check = None
-    if resolved.source == "server":
+    if resolved.source == "server" or resolved.kind == "local":   # the server's own disk: one folder per user and camera
         owner, camera = ctx.data_dir.parent.name, ctx.data_dir.name
         if resolved.kind == "local":
-            config["root"] = str(Path(config["root"]) / owner / camera)
+            config["root"] = str(Path(config.get("root") or settings.local_root) / owner / camera)
         else:
             config["folder"] = "/".join(part for part in (config.get("folder", ""), owner, camera) if part)
     elif resolved.kind == "webdav":  # a user-chosen address must not lead into the server's own network
         host_check = lambda host: checked_host(host, settings.allow_private_hosts, resolver)  # noqa: E731
     config["prefix"] = ctx.playlist_prefix
     if resolved.kind == "onedrive":
-        config.update(client_id=settings.ms_client_id, client_secret=settings.ms_client_secret, tenant=settings.ms_tenant,
-                      on_token=resolved.on_token)
+        # the person's own Microsoft app when they brought one, else the server's
+        config.update(client_id=config.get("client_id") or settings.ms_client_id,
+                      client_secret=config.get("client_secret") or settings.ms_client_secret,
+                      tenant=config.get("tenant") or settings.ms_tenant, on_token=resolved.on_token)
         config.pop("account", None)
         return _onedrive(config, settings)
     return make_storage(resolved.kind, config, ctx, host_check)

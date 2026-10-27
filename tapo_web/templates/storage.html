@@ -34,9 +34,21 @@
 {% if offer_onedrive %}
 <div class="card app-card">
   <h2 class="h5">OneDrive</h2>
-  <p class="text-muted">{% if onedrive_now %}OneDrive is connected. {% endif %}Sign in with Microsoft to send your recordings to your own OneDrive. The app can only use its own folder (<em>Apps</em>), never the rest of your files, and you can remove its access at any time in your Microsoft account.</p>
+  <p class="text-muted">{% if onedrive_now %}OneDrive is connected. {% endif %}Send your recordings to your own OneDrive. You use <strong>your own Microsoft app</strong> (free, registered once at portal.azure.com): the app can only use its own folder (<em>Apps</em>), never the rest of your files. <a href="https://luigiellebalotta.github.io/tapo-uploader/storage-guide.html#onedrive" target="_blank" rel="noopener noreferrer">Step-by-step guide</a>. The redirect address to register is <code>{{ onedrive_redirect }}</code>.</p>
   <form method="post" action="/storage/onedrive/connect">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-group">
+      <label for="ms_client_id">Application (client) ID</label>
+      <input class="form-control" id="ms_client_id" name="client_id" value="{{ saved_ms_client_id }}" autocomplete="off" placeholder="{% if server_has_ms_app %}Leave empty to use the server's app{% else %}00000000-0000-0000-0000-000000000000{% endif %}">
+    </div>
+    <div class="form-group">
+      <label for="ms_client_secret">Client secret (its Value)</label>
+      <input class="form-control" id="ms_client_secret" name="client_secret" type="password" autocomplete="new-password" placeholder="{% if saved_ms_client_id %}Saved: leave empty to keep it{% endif %}">
+    </div>
+    <div class="form-group">
+      <label for="ms_tenant">Tenant (optional)</label>
+      <input class="form-control" id="ms_tenant" name="tenant" autocomplete="off" placeholder="common">
+    </div>
     <button class="btn btn-primary btn-round" type="submit">{% if onedrive_now %}Connect OneDrive again{% else %}Connect OneDrive{% endif %}</button>
   </form>
 </div>

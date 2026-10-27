@@ -29,7 +29,7 @@ def test_storage_values_are_read():
 
 
 @pytest.mark.parametrize("env", [{"STORAGE": "floppy"}, {"STORAGE_ALLOWED": "youtube,floppy"},
-                                 {"STORAGE_ALLOWED": "local"}, {"STORAGE_ALLOWED": "rclone,webdav"}])
+                                 {"STORAGE_ALLOWED": "rclone"}, {"STORAGE_ALLOWED": "rclone,webdav"}])
 def test_unknown_or_server_only_kinds_are_rejected(env):
     with pytest.raises(SettingsError):
         Settings.from_env(env)

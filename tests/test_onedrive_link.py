@@ -50,11 +50,14 @@ def test_settings_read_the_microsoft_app_and_default_to_allowing_onedrive():
     assert "onedrive" in Settings.from_env({}).storage_allowed
 
 
-def test_page_offers_connect_only_when_the_server_has_a_microsoft_app(tmp_path, graph):
+def test_page_asks_for_the_persons_own_microsoft_app_and_works_without_a_server_one(tmp_path, graph):
     env = setup(tmp_path, graph)
-    assert "Connect OneDrive" in env.client.get("/storage").get_data(as_text=True)
+    page = env.client.get("/storage").get_data(as_text=True)
+    assert "Connect OneDrive" in page and 'name="client_id"' in page and 'name="client_secret"' in page
     bare = setup(tmp_path / "b", graph, ms_client_id="", ms_client_secret="")
-    assert "Connect OneDrive" not in bare.client.get("/storage").get_data(as_text=True)
+    assert "Connect OneDrive" in bare.client.get("/storage").get_data(as_text=True)
+    hidden = setup(tmp_path / "h", graph, storage_allowed=("youtube", "webdav"))
+    assert "Connect OneDrive" not in hidden.client.get("/storage").get_data(as_text=True)
 
 
 def test_connect_sends_the_user_to_microsoft_with_state_and_pkce(tmp_path, graph):
@@ -76,7 +79,8 @@ def test_connect_needs_csrf_permission_and_a_configured_app(tmp_path, graph):
     off = setup(tmp_path / "o", graph, allow_own_storage=False)
     assert off.client.post("/storage/onedrive/connect", data={"csrf_token": off.csrf(off.client, "/storage")}).status_code == 403
     bare = setup(tmp_path / "b", graph, ms_client_id="", ms_client_secret="")
-    assert bare.client.post("/storage/onedrive/connect", data={"csrf_token": bare.csrf(bare.client, "/storage")}).status_code == 503
+    # no server app and nothing typed: there is no app to sign in with
+    assert bare.client.post("/storage/onedrive/connect", data={"csrf_token": bare.csrf(bare.client, "/storage")}).status_code == 400
     not_allowed = setup(tmp_path / "n", graph, storage_allowed=("youtube", "webdav"))
     assert not_allowed.client.post("/storage/onedrive/connect",
                                    data={"csrf_token": not_allowed.csrf(not_allowed.client, "/storage")}).status_code == 400
@@ -174,3 +178,74 @@ def test_if_the_microsoft_app_is_removed_from_the_server_the_default_applies_wit
     bare = Settings(**{**env.settings.__dict__, "ms_client_id": "", "ms_client_secret": ""})
     resolved = resolve(bare, env.db, env.vault, env.alice)
     assert resolved.kind == "youtube" and resolved.notice
+
+
+def own_app(tmp_path, graph, **settings):
+    """A server with no Microsoft app: the person brings theirs."""
+    graph.client_id, graph.client_secret = "11111111-2222-3333-4444-555555555555", "my-own-secret"
+    return setup(tmp_path, graph, ms_client_id="", ms_client_secret="", **settings)
+
+
+def connect_own(env, **fields):
+    form = {"client_id": "11111111-2222-3333-4444-555555555555", "client_secret": "my-own-secret", "tenant": "", **fields}
+    return env.client.post("/storage/onedrive/connect", data={"csrf_token": env.csrf(env.client, "/storage"), **form})
+
+
+def test_a_person_connects_with_their_own_app_and_the_credentials_are_kept_encrypted(tmp_path, graph):
+    env = own_app(tmp_path, graph)
+    response = connect_own(env)
+    assert response.status_code == 302 and "client_id=11111111-2222-3333-4444-555555555555" in response.headers["Location"]
+    assert "my-own-secret" not in response.headers["Location"]
+    assert "my-own-secret" not in " ".join(response.headers.getlist("Set-Cookie"))   # never readable in the cookie
+    assert finish(env, response.headers["Location"]).status_code == 302
+    row = env.db.storage_config(env.alice)
+    assert row["kind"] == "onedrive" and "my-own-secret" not in row["config_enc"] and "11111111" not in row["config_enc"]
+    resolved = resolve(env.settings, env.db, env.vault, env.alice)
+    assert resolved.kind == "onedrive" and resolved.config["client_id"].startswith("11111111")
+    assert resolved.config["client_secret"] == "my-own-secret" and resolved.notice is None
+
+
+def test_the_recorder_uses_the_persons_app_not_the_servers(tmp_path, graph):
+    env = own_app(tmp_path, graph)
+    finish(env, connect_own(env).headers["Location"])
+    clip = tmp_path / "src.mp4"
+    clip.write_bytes(b"0123456789")
+    storage_for(env).put(clip, DAY, "mine", "")
+    assert graph.token_calls[-1]["client_id"].startswith("11111111") and graph.files["Tapo 2026-10-26/mine.mp4"] == b"0123456789"
+
+
+def test_a_wrong_secret_fails_cleanly_and_saves_nothing(tmp_path, graph):
+    env = own_app(tmp_path, graph)
+    response = finish(env, connect_own(env, client_secret="not-the-secret").headers["Location"])
+    assert response.status_code == 502 and env.db.storage_config(env.alice) is None
+    assert "not-the-secret" not in response.get_data(as_text=True) and "AADSTS" not in response.get_data(as_text=True)
+
+
+@pytest.mark.parametrize("fields", [{"client_id": "not a guid!"}, {"client_id": ""}, {"client_secret": ""},
+                                    {"client_secret": "x" * 500}, {"tenant": "../../evil"}, {"tenant": "a b"}])
+def test_nonsense_app_values_are_refused_before_going_to_microsoft(tmp_path, graph, fields):
+    env = own_app(tmp_path, graph)
+    response = connect_own(env, **fields)
+    assert response.status_code == 400 and "oauth2" not in response.headers.get("Location", "")
+
+
+def test_reconnecting_with_the_secret_left_empty_reuses_the_saved_app(tmp_path, graph):
+    env = own_app(tmp_path, graph)
+    finish(env, connect_own(env).headers["Location"])
+    again = connect_own(env, client_secret="", client_id="")
+    assert again.status_code == 302 and "client_id=11111111" in again.headers["Location"]
+    assert finish(env, again.headers["Location"]).status_code == 302
+
+
+def test_a_tenant_can_be_chosen(tmp_path, graph):
+    env = own_app(tmp_path, graph)
+    response = connect_own(env, tenant="consumers")
+    assert "/consumers/oauth2/v2.0/authorize" in response.headers["Location"]
+
+
+def test_the_servers_app_is_used_when_the_person_types_nothing(tmp_path, graph):
+    env = setup(tmp_path, graph)                                          # the server has MS_CLIENT_ID / MS_CLIENT_SECRET
+    response = connect_own(env, client_id="", client_secret="")
+    assert response.status_code == 302 and "client_id=cid" in response.headers["Location"]
+    finish(env, response.headers["Location"])
+    assert "client_id" not in resolve(env.settings, env.db, env.vault, env.alice).config      # nothing of the server's is copied

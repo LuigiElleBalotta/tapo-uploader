@@ -652,10 +652,11 @@ per questo uso, quindi leggi la documentazione di rclone per i suoi limiti prima
 ottiene senza fare nulla, anche senza accedere con Nextcloud. Le destinazioni che stanno sul server (WebDAV, cartella,
 rclone) hanno una sotto-cartella per ogni camera, così nessuno vede i video di un altro. Con `ALLOW_OWN_STORAGE=1`
 ogni utente può scegliere, nella pagina **Recordings**, YouTube o il proprio WebDAV o il proprio **OneDrive** (`STORAGE_ALLOWED` restringe la
-scelta; l'indirizzo deve essere pubblico e `https`). `local` e `rclone` sono solo per il server, di proposito. Per OneDrive registra un'app su
+scelta; l'indirizzo deve essere pubblico e `https`). `local` e `rclone` sono solo per il server, di proposito. Per OneDrive ogni persona registra **la propria app Microsoft gratuita** su
 [portal.azure.com](https://portal.azure.com) (Registrazioni app, tipi di account "qualsiasi directory organizzativa e
-account Microsoft personali"), aggiungi il redirect web `PUBLIC_URL/storage/onedrive/callback`, crea un segreto client e
-imposta `MS_CLIENT_ID` e `MS_CLIENT_SECRET`: ogni utente preme poi **Connect OneDrive** e l'app può usare solo la propria
+account Microsoft personali"), aggiunge il redirect web `PUBLIC_URL/storage/onedrive/callback`, crea un segreto client e
+incolla ID e segreto nella pagina **Recordings** (restano cifrati con il suo account); un amministratore può invece
+impostare `MS_CLIENT_ID` e `MS_CLIENT_SECRET` come app condivisa per chi non scrive nulla. L'app può usare solo la propria
 cartella (`Files.ReadWrite.AppFolder`), mai il resto dei suoi file. OneDrive è provato contro una simulazione delle API
 Microsoft, non ancora su un account vero. Quando un utente cambia destinazione la precedente resta nella sua lista e i
 video restano nella pagina personale, ciascuno segnato con dove si trova. `local` e `rclone` sono solo per il server, di proposito: un

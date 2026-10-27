@@ -69,12 +69,14 @@ def test_resolve_falls_back_with_notice_when_kind_removed_from_allowed(tmp_path)
     assert resolved.kind == "youtube" and "webdav" in resolved.notice and "server default" in resolved.notice
 
 
-def test_resolve_never_allows_local_or_rclone_for_users(tmp_path):
+def test_resolve_never_allows_rclone_for_users_and_never_a_path_for_local(tmp_path):
     env, uid = user(tmp_path, allow_own_storage=True, storage_allowed=("local", "rclone", "youtube"))
-    for kind in ("local", "rclone"):
-        save_own(env, uid, kind, {"root": "/etc"})
-        resolved = resolve(env.settings, env.db, env.vault, uid)
-        assert resolved.kind == "youtube" and resolved.source == "server" and resolved.notice
+    save_own(env, uid, "rclone", {"root": "/etc"})
+    resolved = resolve(env.settings, env.db, env.vault, uid)
+    assert resolved.kind == "youtube" and resolved.source == "server" and resolved.notice
+    save_own(env, uid, "local", {"root": "/etc"})            # a saved path is never honoured: only the server's own folder
+    resolved = resolve(env.settings, env.db, env.vault, uid)
+    assert resolved.kind == "local" and resolved.config == {} and resolved.source == "own"
 
 
 def test_resolve_unreadable_saved_config_falls_back_with_notice(tmp_path):

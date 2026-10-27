@@ -33,17 +33,28 @@ def register(app):
         except (VaultError, ValueError):
             return {}
 
+    def own_onedrive():
+        row = db.storage_config(uid())
+        if not row or row["kind"] != "onedrive" or not row["config_enc"]:
+            return {}
+        try:
+            return json.loads(vault.decrypt(row["config_enc"]))
+        except (VaultError, ValueError):
+            return {}
+
     def show(status=200, error=None, result=None, form=None):
         resolved = resolve(settings, db, vault, uid())
         row = db.storage_config(uid())
         own = own_webdav()
         kinds = [k for k in settings.storage_allowed if k in USER_STORAGE_KINDS and k != "onedrive"]   # OneDrive has its own button
-        offer_onedrive = settings.allow_own_storage and settings.onedrive_enabled and "onedrive" in settings.storage_allowed
+        offer_onedrive = settings.allow_own_storage and "onedrive" in settings.storage_allowed
         values = form or {"kind": row["kind"] if row and resolved.source == "own" else "default",
                           "url": own.get("url", ""), "user": own.get("user", ""), "folder": own.get("folder", "")}
         return render_template("storage.html", resolved=resolved, label=LABELS[resolved.kind],
                                allow_own=settings.allow_own_storage and bool(kinds), kinds=kinds, labels=LABELS,
-                               offer_onedrive=offer_onedrive, onedrive_now=resolved.kind == "onedrive" and resolved.source == "own",
+                               offer_onedrive=offer_onedrive,
+                               onedrive_redirect=(settings.public_url or request.host_url.rstrip("/")) + "/storage/onedrive/callback", server_has_ms_app=settings.onedrive_enabled,
+                               saved_ms_client_id=own_onedrive().get("client_id", ""), onedrive_now=resolved.kind == "onedrive" and resolved.source == "own",
                                values=values, has_password=bool(own.get("password")), error=error, result=result,
                                server_label=LABELS[settings.storage],
                                sources=[{"id": sid, "label": label_for(old)} for sid, old in remembered(db, vault, uid())
@@ -97,6 +108,11 @@ def register(app):
             keep_if_left(before, server_default(settings))
             db.delete_storage_config(uid())
             flash("Your recordings go to the server's default destination.", "success")
+            return redirect("/storage")
+        if kind == "local" and "local" in settings.storage_allowed:
+            keep_if_left(before, Resolved("local", {}, "own"))
+            db.save_storage_config(uid(), "local", None)
+            flash("Your recordings are kept on the server.", "success")
             return redirect("/storage")
         if kind == "onedrive":
             return show(400, "Use the Connect OneDrive button to link your OneDrive.", form=form_values())

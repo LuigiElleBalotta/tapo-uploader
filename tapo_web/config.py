@@ -12,7 +12,8 @@ class SettingsError(ValueError):
 
 
 STORAGE_KINDS = ("youtube", "webdav", "local", "rclone")
-USER_STORAGE_KINDS = ("youtube", "webdav", "onedrive")  # local and rclone are server-level only: a user could aim them at the server
+USER_STORAGE_KINDS = ("youtube", "webdav", "onedrive", "local")  # "local" for a user means the server's disk, with no path to pick;
+# local and rclone are server-level only: a user could aim them at the server
 
 
 def _flag(environ, name, default=False):
@@ -20,6 +21,16 @@ def _flag(environ, name, default=False):
     if value is None or value == "":
         return default
     return value.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _non_negative(environ, name, default, cast):
+    try:
+        value = cast(environ.get(name) or default)
+    except ValueError as err:
+        raise SettingsError(f"{name} must be a number") from err
+    if value < 0:
+        raise SettingsError(f"{name} cannot be negative")
+    return value
 
 
 def _int(environ, name, default):
@@ -65,11 +76,19 @@ class Settings:
     rclone_remote: str = ""
     rclone_config: str = ""
     rclone_folder: str = ""
+    local_keep_days: int = 0          # 0 = keep forever; a user may choose their own
+    local_quota_gb: float = 0         # per user, 0 = unlimited; an administrator may set one per user
+    disk_min_free_gb: float = 1.0     # below this the page warns everybody and the oldest local videos go; 0 = off
     ms_client_id: str = ""
     ms_client_secret: str = ""
     ms_tenant: str = "common"
     ms_graph_url: str = "https://graph.microsoft.com/v1.0"
     ms_login_url: str = "https://login.microsoftonline.com"
+
+    @property
+    def local_root(self):
+        """Where videos kept on the server go (one sub-folder per user and camera)."""
+        return self.storage_local_root or str(self.data_dir / "videos")
 
     @property
     def onedrive_enabled(self):
@@ -109,7 +128,7 @@ class Settings:
         allowed = tuple(kind.strip().lower() for kind in (environ.get("STORAGE_ALLOWED") or "youtube,webdav,onedrive").split(",")
                         if kind.strip())
         if not allowed or any(kind not in USER_STORAGE_KINDS for kind in allowed):
-            raise SettingsError("STORAGE_ALLOWED may only list youtube, webdav and onedrive (local and rclone are server-level)")
+            raise SettingsError("STORAGE_ALLOWED may only list youtube, webdav, onedrive and local (rclone is server-level)")
         needs = {"webdav": "STORAGE_WEBDAV_URL", "local": "STORAGE_LOCAL_ROOT", "rclone": "STORAGE_RCLONE_REMOTE"}
         if storage in needs and not environ.get(needs[storage]):
             raise SettingsError(f"STORAGE={storage} needs {needs[storage]}")
@@ -148,6 +167,9 @@ class Settings:
             rclone_remote=environ.get("STORAGE_RCLONE_REMOTE", ""),
             rclone_config=environ.get("STORAGE_RCLONE_CONFIG", ""),
             rclone_folder=environ.get("STORAGE_RCLONE_FOLDER", ""),
+            local_keep_days=_non_negative(environ, "LOCAL_KEEP_DAYS", 0, int),
+            local_quota_gb=_non_negative(environ, "LOCAL_QUOTA_GB", 0, float),
+            disk_min_free_gb=_non_negative(environ, "DISK_MIN_FREE_GB", 1.0, float),
             ms_client_id=environ.get("MS_CLIENT_ID", ""),
             ms_client_secret=environ.get("MS_CLIENT_SECRET", ""),
             ms_tenant=environ.get("MS_TENANT") or "common",

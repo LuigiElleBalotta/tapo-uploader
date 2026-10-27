@@ -684,10 +684,11 @@ gets it without doing anything, even without signing in with Nextcloud. Destinat
 (WebDAV, folder, rclone) get one sub-folder per camera, so nobody can see another person's videos. With
 `ALLOW_OWN_STORAGE=1` each user can pick, on the **Recordings** page, YouTube, their own WebDAV or their own
 **OneDrive** (`STORAGE_ALLOWED` narrows the choice; the address must be public and `https`). `local` and `rclone` are
-server-only on purpose. For OneDrive register an app at
+server-only on purpose. For OneDrive each person registers **their own free Microsoft app** at
 [portal.azure.com](https://portal.azure.com) (App registrations, supported account types "any organizational directory
-and personal Microsoft accounts"), add the web redirect `PUBLIC_URL/storage/onedrive/callback`, create a client secret
-and set `MS_CLIENT_ID` and `MS_CLIENT_SECRET`: each user then presses **Connect OneDrive** and the app can only use its own
+and personal Microsoft accounts"), adds the web redirect `PUBLIC_URL/storage/onedrive/callback`, creates a client secret
+and pastes the ID and the secret on the **Recordings** page (kept encrypted with their account); an administrator may
+instead set `MS_CLIENT_ID` and `MS_CLIENT_SECRET` as a shared app for people who type nothing. The app can only use its own
 folder (`Files.ReadWrite.AppFolder`), never the rest of their files. OneDrive is tested against a fake of Microsoft's
 API, not yet against a real account. Whenever a user changes destination the previous one stays in their list and its
 videos stay on the personal page, each marked with where it lives. `local` and `rclone` are

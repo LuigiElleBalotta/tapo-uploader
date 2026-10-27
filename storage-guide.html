@@ -64,23 +64,23 @@
         <p class="text-muted">Limit: Google gives 10,000 quota units a day to a project and a day's upload costs about 1,700, so a project serves around five people. The administrator page shows the day's use.</p>
 
         <h2 id="onedrive">OneDrive</h2>
-        <p>Each person connects their own OneDrive (personal, or work/school). The app can use only its own folder, <em>Apps</em> in their OneDrive, never the rest of their files. This needs an app registered once by the administrator, and a server that runs the multi-account mode.</p>
-        <h3>Administrator</h3>
+        <p>Each person connects their own OneDrive (personal, or work/school) with <strong>their own Microsoft app</strong>, registered once for free. The app can use only its own folder, <em>Apps</em>, in the person's OneDrive, never the rest of their files, and the app's ID and secret stay with that person's account, encrypted: nobody else uses them.</p>
+        <h3>Each person</h3>
         <ol>
           <li>Sign in at <a href="https://portal.azure.com">portal.azure.com</a> (a free Microsoft account is enough) and open <strong>Microsoft Entra ID → App registrations → New registration</strong>.</li>
           <li>Name: <code>tapo-uploader</code>. Supported account types: <strong>Accounts in any organizational directory and personal Microsoft accounts</strong>.</li>
-          <li>Redirect URI: platform <strong>Web</strong>, value <code>https://YOUR-ADDRESS/storage/onedrive/callback</code>. <strong>Register</strong>.</li>
-          <li>On the overview page copy the <strong>Application (client) ID</strong>: it is <code>MS_CLIENT_ID</code>.</li>
-          <li><strong>Certificates &amp; secrets → New client secret</strong>. Copy the <strong>Value</strong> (not the ID) at once, it is shown only now: it is <code>MS_CLIENT_SECRET</code>. It expires (up to 24 months): note the date and make a new one before it.</li>
-          <li><strong>API permissions → Add a permission → Microsoft Graph → Delegated</strong>: add <code>Files.ReadWrite.AppFolder</code> and <code>offline_access</code> (and keep <code>User.Read</code>). No admin consent is needed.</li>
-          <li>In the server's environment file set the two values, make sure the server has <code>PUBLIC_URL</code>, <code>ALLOW_OWN_STORAGE=1</code> and <code>onedrive</code> in <code>STORAGE_ALLOWED</code> (it is by default), then restart.
+          <li>Redirect URI: platform <strong>Web</strong>, value <code>https://YOUR-SERVER/storage/onedrive/callback</code> (the page shows the exact address to use). <strong>Register</strong>.</li>
+          <li>On the overview page copy the <strong>Application (client) ID</strong>.</li>
+          <li><strong>Certificates &amp; secrets → New client secret</strong>. Copy the <strong>Value</strong> (not the ID) at once, it is shown only now. It expires (up to 24 months): make a new one before then and connect again.</li>
+          <li><strong>API permissions → Add a permission → Microsoft Graph → Delegated</strong>: add <code>Files.ReadWrite.AppFolder</code> and <code>offline_access</code> (keep <code>User.Read</code>). No administrator consent is needed.</li>
+          <li>On <strong>Recordings</strong> paste the ID and the secret (leave the tenant empty unless your directory needs one), press <strong>Connect OneDrive</strong>, sign in with Microsoft and accept. Recordings appear in your OneDrive under <em>Apps</em>, one folder per day.</li>
+        </ol>
+        <p>You can remove the access at any time in your Microsoft account (privacy, apps and services), or delete the app in Azure. Work or school accounts may ask an administrator to approve an app.</p>
+        <h3>Administrator (optional)</h3>
+        <p>To spare people the registration you can register one app yourself and give it to the server; people who type nothing then use yours. The server must have <code>PUBLIC_URL</code>, <code>ALLOW_OWN_STORAGE=1</code> and <code>onedrive</code> in <code>STORAGE_ALLOWED</code> (it is by default).</p>
 <pre>MS_CLIENT_ID=00000000-0000-0000-0000-000000000000
 MS_CLIENT_SECRET=the-secret-value
 # MS_TENANT=common     # common (default) | consumers | organizations</pre>
-          </li>
-        </ol>
-        <h3>Each person</h3>
-        <p><strong>Recordings → Connect OneDrive</strong>, sign in with Microsoft and accept. Recordings appear in your OneDrive under <em>Apps</em>, in one folder per day. You can remove the access at any time in your Microsoft account (privacy, apps and services). Work or school accounts may ask an administrator to approve an app that is not publisher-verified.</p>
         <p class="text-muted">The OneDrive connection has been tested against a simulation of Microsoft's service, not yet on a real account: tell us if something differs.</p>
 
         <h2 id="webdav">WebDAV (Nextcloud, ownCloud, Synology...)</h2>
