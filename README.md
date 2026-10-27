@@ -659,7 +659,9 @@ motion events; only then does recording start.
 
 ## Where the recordings go
 
-By default the daily video goes to YouTube. You can send it somewhere else:
+By default the daily video goes to YouTube. You can send it somewhere else. A step-by-step guide to set up each
+destination (Google app, Azure app for OneDrive, Nextcloud app password, rclone) is on the
+[storage setup page](https://luigiellebalotta.github.io/tapo-uploader/storage-guide.html):
 
 | Destination | `STORAGE` | What it needs |
 |---|---|---|

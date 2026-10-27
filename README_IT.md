@@ -628,7 +628,9 @@ solo allora parte la registrazione.
 
 ## Dove vanno le registrazioni
 
-Di default il video del giorno va su YouTube. Puoi mandarlo altrove:
+Di default il video del giorno va su YouTube. Puoi mandarlo altrove. La guida passo passo per configurare ogni
+destinazione (app Google, app Azure per OneDrive, password per app di Nextcloud, rclone) è nella
+[pagina di configurazione degli storage](https://luigiellebalotta.github.io/tapo-uploader/storage-guide.html) (in inglese):
 
 | Destinazione | `STORAGE` | Cosa serve |
 |---|---|---|

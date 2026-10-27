@@ -148,7 +148,7 @@
       <div class="container">
         <p class="eyebrow eyebrow-dark">New · optional</p>
         <h2 id="storage-title">Choose where the recordings go</h2>
-        <p class="section-lead">YouTube stays the default. If you would rather keep the footage somewhere else, send it to your own OneDrive, Nextcloud, cloud or disk instead, and change your mind whenever you like.</p>
+        <p class="section-lead">YouTube stays the default. If you would rather keep the footage somewhere else, send it to your own OneDrive, Nextcloud, cloud or disk instead, and change your mind whenever you like. <a href="storage-guide.html">Step-by-step guide to set each one up</a>.</p>
         <div class="row">
           <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">smart_display</span><h3>YouTube</h3><p>Private videos, one playlist per day. The default, unchanged.</p></div></div>
           <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">cloud_queue</span><h3>OneDrive</h3><p>Each person connects their own with a Microsoft sign-in. The app only sees its own folder, never the rest of your files.</p></div></div>
@@ -157,7 +157,7 @@
           <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">folder</span><h3>A folder</h3><p>Plain files on the machine that runs it.</p></div></div>
           <div class="col-md-6 col-lg-4"><div class="card feature"><span class="mi" aria-hidden="true">swap_horiz</span><h3>Switch any time</h3><p>Earlier destinations stay in your list and their videos stay on your page, each marked with where it is. Removing one from the list deletes nothing.</p></div></div>
         </div>
-        <p class="note"><span class="mi small" aria-hidden="true">play_circle</span> With several accounts the server picks the default and each person may use their own YouTube, OneDrive or WebDAV where you allow it. Every video has two buttons: <strong>Watch here</strong> plays it on the page (not for private YouTube videos, which YouTube refuses to embed), <strong>Open the video</strong> goes to where it lives. <a href="https://github.com/LuigiElleBalotta/tapo-uploader#where-the-recordings-go">Read how it works</a>.</p>
+        <p class="note"><span class="mi small" aria-hidden="true">play_circle</span> With several accounts the server picks the default and each person may use their own YouTube, OneDrive or WebDAV where you allow it. Every video has two buttons: <strong>Watch here</strong> plays it on the page (not for private YouTube videos, which YouTube refuses to embed), <strong>Open the video</strong> goes to where it lives. <a href="storage-guide.html">How to set up each storage</a> · <a href="https://github.com/LuigiElleBalotta/tapo-uploader#where-the-recordings-go">Read how it works</a>.</p>
       </div>
     </section>
 
@@ -201,12 +201,12 @@
             <p>Not by itself. This project adds it from outside: it reads the camera's RTSP stream and uploads with the official YouTube Data API.</p>
             <h3>Do I need to root or flash the camera?</h3>
             <p>No. The stock firmware already offers RTSP and ONVIF once you create the Camera Account in the Tapo app.</p>
-          </div>
-          <div class="col-lg-6">
             <h3>Will the videos be public?</h3>
             <p>No. On YouTube they are uploaded as private and only your Google account can see them; on WebDAV, rclone or a folder they sit where only you (and the server's administrator) can read them.</p>
             <h3>Can I keep them somewhere other than YouTube?</h3>
-            <p>Yes: your own OneDrive, WebDAV (Nextcloud and similar), a local folder, or anything rclone supports, such as Mega or S3 storage.</p>
+            <p>Yes (<a href="storage-guide.html">setup guide</a>): your own OneDrive, WebDAV (Nextcloud and similar), a local folder, or anything rclone supports, such as Mega or S3 storage.</p>
+          </div>
+          <div class="col-lg-6">
             <h3>If I change where videos go, do I lose the old ones?</h3>
             <p>No. The earlier destination stays in your list and its videos stay on your page, each marked with its source. They are never moved or deleted.</p>
             <h3>Can several people share one server?</h3>
@@ -231,6 +231,7 @@
           <a href="https://github.com/LuigiElleBalotta/tapo-uploader">Repository</a> ·
           <a href="https://github.com/LuigiElleBalotta/tapo-uploader#readme">English guide</a> ·
           <a href="https://github.com/LuigiElleBalotta/tapo-uploader/blob/main/README_IT.md">Guida italiana</a> ·
+          <a href="storage-guide.html">Storage setup</a> ·
           <a href="privacy.html">Privacy policy</a>
           <p>Page built with <a href="https://github.com/creativetimofficial/now-ui-kit">Now UI Kit</a> (MIT, Creative Tim).</p>
         </div>

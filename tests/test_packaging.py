@@ -92,3 +92,24 @@ def test_readmes_document_the_docker_image():
     for name in ("README.md", "README_IT.md"):
         text = read(name)
         assert "ghcr.io/luigiellebalotta/tapo-uploader" in text and "docker-compose.yml" in text, name
+
+
+def test_storage_guide_page_covers_every_destination_and_is_linked():
+    guide = read("storage-guide.html")
+    for needed in ('id="youtube"', 'id="onedrive"', 'id="webdav"', 'id="rclone"', 'id="folder"', 'id="switching"',
+                   "MS_CLIENT_ID", "MS_CLIENT_SECRET", "Files.ReadWrite.AppFolder", "/storage/onedrive/callback",
+                   "/youtube/callback", "app password", "rclone config", "STORAGE_LOCAL_ROOT", "ALLOW_OWN_STORAGE"):
+        assert needed in guide, needed
+    refs = re.findall(r'<(?:link|script|img)\b[^>]*?(?:href|src)="([^"]+)"', guide)
+    own = "https://luigiellebalotta.github.io/tapo-uploader/"
+    others = [r for r in refs if re.match(r"^(https?:)?//", r) and not r.startswith(own)]
+    assert refs and not others, "the guide must load nothing from other sites"
+    assert 'href="storage-guide.html"' in read("index.html") and "storage-guide.html" in read("sitemap.xml")
+    assert "storage-guide.html" in read("README.md") and "storage-guide.html" in read("README_IT.md")
+
+
+def test_guide_names_match_the_settings_the_code_reads():
+    guide, settings = read("storage-guide.html"), read("tapo_web/config.py")
+    for name in ("MS_CLIENT_ID", "MS_CLIENT_SECRET", "MS_TENANT", "STORAGE_RCLONE_REMOTE", "STORAGE_LOCAL_ROOT",
+                 "STORAGE_WEBDAV_URL", "YOUTUBE_CLIENT_SECRET_JSON", "ALLOW_OWN_STORAGE"):
+        assert name in guide and name in settings, name
