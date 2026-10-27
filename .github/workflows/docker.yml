@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -25,7 +25,14 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: requirements*.txt
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Install ffmpeg
+        timeout-minutes: 10          # the Ubuntu mirrors sometimes hang: do not wait forever, try again
+        run: |
+          for attempt in 1 2 3; do
+            if timeout 150 sudo apt-get update && timeout 240 sudo apt-get install -y --no-install-recommends ffmpeg; then exit 0; fi
+            echo "apt failed (attempt $attempt), trying again"; sleep 10
+          done
+          exit 1
       - run: pip install -r requirements-web.txt -r requirements-dev.txt
       - run: python -m pytest tests -q
 

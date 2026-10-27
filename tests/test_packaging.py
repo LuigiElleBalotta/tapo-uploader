@@ -80,6 +80,7 @@ def test_workflow_tests_then_publishes_a_multi_arch_image_to_ghcr():
         assert needed in flow, needed
     assert "github.event_name != 'pull_request'" in flow  # pull requests never publish
     assert flow.count("packages: write") == 1 and "pull_request_target" not in flow
+    assert "timeout-minutes" in flow and "for attempt in" in flow and "ubuntu-24.04" in flow  # a hung apt mirror must not stall a release
 
 
 def test_compose_file_runs_the_web_app_from_the_published_image():
